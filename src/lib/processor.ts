@@ -6,6 +6,7 @@ import {
   buildDailyFollowUp,
   type DailyFollowUpDigest,
 } from "@/lib/digests/follow-up";
+import { selectVideoIdsNeedingIngestion } from "@/lib/ingest/discovery";
 import { loadPrompt } from "@/lib/prompts";
 import { fetchFreeTranscript } from "@/lib/youtube/transcripts";
 import { ensureCompletedWeeklyDigestsForCreator } from "@/lib/weekly/generate";
@@ -23,6 +24,7 @@ type QueueItem = {
 
 export async function processIngestQueue(limit = numberEnv("MAX_VIDEOS_PROCESSED_PER_CRON_RUN", 3)) {
   const sql = getSql();
+  logIngest("queue-scan-started", { limit });
   const items = await sql<QueueItem[]>`
     select
       ingest_job_items.id as item_id,
@@ -51,6 +53,7 @@ export async function processIngestQueue(limit = numberEnv("MAX_VIDEOS_PROCESSED
     limit ${limit}
   `;
 
+  logIngest("queue-scan-finished", { discoveredItems: items.length, limit });
   let processed = 0;
   const touchedCreators = new Set<string>();
   for (const item of items) {
@@ -62,11 +65,28 @@ export async function processIngestQueue(limit = numberEnv("MAX_VIDEOS_PROCESSED
   for (const creatorId of touchedCreators) {
     const openItems = await countOpenItemsForCreator(creatorId);
     if (openItems === 0) {
-      await ensureCompletedWeeklyDigestsForCreator({ creatorId });
+      const weekly = await ensureCompletedWeeklyDigestsForCreator({ creatorId });
+      logIngest("weekly-availability-checked", {
+        creatorId,
+        weekCount: weekly.weekCount,
+      });
     }
   }
 
   return { processed, limit };
+}
+
+export async function refreshCreatorsAndProcessQueue(
+  limit = numberEnv("MAX_VIDEOS_PROCESSED_PER_CRON_RUN", 3),
+) {
+  const discovery = await checkCreatorsForNewVideos();
+  const processing = await processIngestQueue(limit);
+
+  return {
+    ...discovery,
+    processed: processing.processed,
+    limit: processing.limit,
+  };
 }
 
 async function countOpenItemsForCreator(creatorId: string) {
@@ -83,6 +103,12 @@ async function countOpenItemsForCreator(creatorId: string) {
 
 async function processQueueItem(item: QueueItem) {
   const sql = getSql();
+  logIngest("item-started", {
+    itemId: item.item_id,
+    jobId: item.job_id,
+    videoId: item.video_id,
+    youtubeVideoId: item.youtube_video_id,
+  });
   await sql`
     update ingest_jobs
     set status = 'processing', current_video_id = ${item.video_id}, started_at = coalesce(started_at, now()), updated_at = now()
@@ -97,6 +123,10 @@ async function processQueueItem(item: QueueItem) {
   try {
     const transcript = await ensureTranscript(item);
     if (transcript.status === "missing") {
+      logIngest("transcript-waiting", {
+        itemId: item.item_id,
+        videoId: item.video_id,
+      });
       await sql`
         update ingest_job_items
         set status = 'waiting_for_transcript', error_message = 'Transcript missing; waiting for retry window.', updated_at = now()
@@ -117,13 +147,28 @@ async function processQueueItem(item: QueueItem) {
       where id = ${item.job_id}
     `;
 
+    logIngest("summarization-started", {
+      itemId: item.item_id,
+      videoId: item.video_id,
+      source: transcript.source,
+    });
     await ensureDailyDigest(item, transcript);
     await sql`
       update ingest_job_items
       set status = 'completed', completed_at = now(), updated_at = now()
       where id = ${item.item_id}
     `;
+    logIngest("item-completed", {
+      itemId: item.item_id,
+      videoId: item.video_id,
+    });
   } catch (error) {
+    console.error("[ingest:item-failed]", {
+      itemId: item.item_id,
+      jobId: item.job_id,
+      videoId: item.video_id,
+      message: (error as Error).message,
+    });
     await sql`
       update ingest_job_items
       set status = 'failed', error_message = ${(error as Error).message}, completed_at = now(), updated_at = now()
@@ -153,9 +198,17 @@ async function ensureTranscript(item: QueueItem) {
   `;
 
   if (existing[0]) {
+    logIngest("transcript-existing", {
+      videoId: item.video_id,
+      source: existing[0].source,
+    });
     return existing[0];
   }
 
+  logIngest("transcript-fetch-started", {
+    videoId: item.video_id,
+    youtubeVideoId: item.youtube_video_id,
+  });
   const freeTranscript = await fetchFreeTranscript(item.youtube_video_id);
   if (freeTranscript.status === "completed") {
     await sql`
@@ -180,11 +233,20 @@ async function ensureTranscript(item: QueueItem) {
         null
       )
     `;
+    logIngest("transcript-fetch-completed", {
+      videoId: item.video_id,
+      source: freeTranscript.source,
+      characters: freeTranscript.transcript_text.length,
+    });
     return freeTranscript;
   }
 
   if (process.env.GEMINI_API_KEY) {
     try {
+      logIngest("video-notes-fallback-started", {
+        videoId: item.video_id,
+        youtubeVideoId: item.youtube_video_id,
+      });
       const notes = await generateGeminiVideoNotes({
         creatorId: item.creator_id,
         videoId: item.video_id,
@@ -239,6 +301,10 @@ async function ensureTranscript(item: QueueItem) {
       ${freeTranscript.retry_after}
     )
   `;
+  logIngest("transcript-missing-recorded", {
+    videoId: item.video_id,
+    retryAfter: freeTranscript.retry_after,
+  });
   return freeTranscript;
 }
 
@@ -254,7 +320,13 @@ async function ensureDailyDigest(
   const existing = await sql<{ id: string }[]>`
     select id from daily_digests where video_id = ${item.video_id} limit 1
   `;
-  if (existing[0]) return existing[0].id;
+  if (existing[0]) {
+    logIngest("daily-digest-existing", {
+      videoId: item.video_id,
+      digestId: existing[0].id,
+    });
+    return existing[0].id;
+  }
 
   const prompt = await loadPrompt("daily_digest");
   const transcriptOrNotes =
@@ -262,6 +334,13 @@ async function ensureDailyDigest(
     JSON.stringify(transcript.derived_notes ?? {}, null, 2);
   const digestDate = digestDateFromPublishedAt(item.published_at);
   const previousDigests = await getPreviousDailyDigests(item.creator_id, digestDate);
+  logIngest("daily-digest-generation-started", {
+    creatorId: item.creator_id,
+    videoId: item.video_id,
+    digestDate,
+    transcriptSource: transcript.source,
+    previousDigestCount: previousDigests.length,
+  });
   const payload = await generateDailyDigestPayload({
     creatorId: item.creator_id,
     videoId: item.video_id,
@@ -323,8 +402,19 @@ async function ensureDailyDigest(
       ${sql.json(payloadWithFollowUp.source_notes)},
       ${sql.json(toJsonParameter(payloadWithFollowUp))}
     )
+    on conflict (video_id) do update set
+      updated_at = daily_digests.updated_at
     returning id
   `;
+  logIngest("daily-digest-db-write-completed", {
+    creatorId: item.creator_id,
+    videoId: item.video_id,
+    digestId: rows[0].id,
+    digestDate,
+  });
+  logIngest("daily-digest-ui-available", {
+    route: `/app/daily?creatorId=${item.creator_id}&date=${digestDate}&videoId=${item.video_id}`,
+  });
   return rows[0].id;
 }
 
@@ -427,40 +517,103 @@ export async function checkCreatorsForNewVideos() {
   `;
 
   let jobsCreated = 0;
+  let videosDiscovered = 0;
+  let videosQueued = 0;
+  let creatorsFailed = 0;
+  const discoveryLimit = numberEnv("CREATOR_DISCOVERY_LOOKBACK_LIMIT", 10);
   for (const creator of creators) {
-    const discovery = await import("@/lib/youtube/client").then((mod) =>
-      mod.discoverCreatorVideos(creator.channel_url, 5),
-    );
-    const videoIds: string[] = [];
-    for (const video of discovery.videos) {
-      const existing = await sql<{ id: string }[]>`
-        select id from videos where youtube_video_id = ${video.youtube_video_id} limit 1
-      `;
-      if (!existing[0]) {
-        const inserted = await import("@/lib/creators").then((mod) =>
-          mod.upsertVideos(creator.id, [video]),
-        );
-        videoIds.push(...inserted);
-      }
-    }
-    if (videoIds.length) {
-      await import("@/lib/creators").then((mod) =>
-        mod.createIngestJob({
-          userId: creator.user_id,
-          creatorId: creator.id,
-          requestedCount: videoIds.length,
-          videoIds,
-        }),
+    try {
+      logIngest("creator-discovery-started", {
+        creatorId: creator.id,
+        discoveryLimit,
+      });
+      const discovery = await import("@/lib/youtube/client").then((mod) =>
+        mod.discoverCreatorVideos(creator.channel_url, discoveryLimit),
       );
-      jobsCreated += 1;
+      videosDiscovered += discovery.videos.length;
+      logIngest("creator-discovery-finished", {
+        creatorId: creator.id,
+        discoveredVideos: discovery.videos.length,
+        warning: discovery.warning ?? null,
+      });
+      const discoveredVideoIds = await import("@/lib/creators").then((mod) =>
+        mod.upsertVideos(creator.id, discovery.videos),
+      );
+      const videoIdsToQueue = await getVideoIdsNeedingIngestion(discoveredVideoIds);
+      if (videoIdsToQueue.length) {
+        await import("@/lib/creators").then((mod) =>
+          mod.createIngestJob({
+            userId: creator.user_id,
+            creatorId: creator.id,
+            requestedCount: videoIdsToQueue.length,
+            videoIds: videoIdsToQueue,
+          }),
+        );
+        jobsCreated += 1;
+        videosQueued += videoIdsToQueue.length;
+        logIngest("creator-ingest-job-created", {
+          creatorId: creator.id,
+          queuedVideos: videoIdsToQueue.length,
+        });
+      } else {
+        logIngest("creator-no-ingest-needed", {
+          creatorId: creator.id,
+          discoveredVideos: discovery.videos.length,
+        });
+      }
+      const weekly = await ensureCompletedWeeklyDigestsForCreator({ creatorId: creator.id });
+      logIngest("weekly-availability-checked", {
+        creatorId: creator.id,
+        weekCount: weekly.weekCount,
+      });
+      await sql`update creators set last_checked_at = now(), updated_at = now() where id = ${creator.id}`;
+    } catch (error) {
+      creatorsFailed += 1;
+      console.error("[ingest:creator-discovery-failed]", {
+        creatorId: creator.id,
+        message: (error as Error).message,
+      });
     }
-    await ensureCompletedWeeklyDigestsForCreator({ creatorId: creator.id });
-    await sql`update creators set last_checked_at = now(), updated_at = now() where id = ${creator.id}`;
   }
 
   if (booleanEnv("GENERATE_IMAGES", false)) {
     console.log("Image generation is enabled but runs after text digests in a later pass.");
   }
 
-  return { creatorsChecked: creators.length, jobsCreated };
+  return {
+    creatorsChecked: creators.length,
+    creatorsFailed,
+    jobsCreated,
+    videosDiscovered,
+    videosQueued,
+  };
+}
+
+async function getVideoIdsNeedingIngestion(videoIds: string[]) {
+  const sql = getSql();
+  const candidates = [];
+
+  for (const videoId of videoIds) {
+    const rows = await sql<Array<{ has_daily_digest: boolean; has_open_ingest_item: boolean }>>`
+      select
+        exists(select 1 from daily_digests where video_id = ${videoId}) as has_daily_digest,
+        exists(
+          select 1
+          from ingest_job_items
+          where video_id = ${videoId}
+            and status in ('queued', 'processing', 'waiting_for_transcript', 'generating_digest', 'generating_assets')
+        ) as has_open_ingest_item
+    `;
+    candidates.push({
+      videoId,
+      hasDailyDigest: rows[0]?.has_daily_digest ?? false,
+      hasOpenIngestItem: rows[0]?.has_open_ingest_item ?? false,
+    });
+  }
+
+  return selectVideoIdsNeedingIngestion(candidates);
+}
+
+function logIngest(event: string, details: Record<string, unknown>) {
+  console.info(`[ingest:${event}]`, details);
 }

@@ -51,14 +51,14 @@ export default async function SettingsPage({
           </form>
         </div>
         <div className="ink-panel">
-          <h3 className="section-kicker">Manual processor</h3>
+          <h3 className="section-kicker">Manual refresh</h3>
           <p className="mt-3 text-sm leading-6 text-stone-700">
-            This runs the same server-side queue processor used by cron. It does not expose
-            `CRON_SECRET` to the browser.
+            This checks YouTube for newly published videos, queues anything missing, and then
+            runs the same server-side queue processor used by cron.
           </p>
           <form action={runIngestNowAction} className="mt-5">
             <SubmitButton className="btn-primary h-11 justify-center" >
-              Run ingest now
+              Refresh and run now
             </SubmitButton>
           </form>
           {user.role !== "admin" ? (

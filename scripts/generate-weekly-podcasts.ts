@@ -11,16 +11,18 @@ import {
   formatTwoHostPodcastScript,
   type PodcastHostKey,
 } from "@/lib/podcasts/two-host";
+import { getPodcastAudioConfig } from "@/lib/podcasts/config";
 import { uploadGeneratedAsset } from "@/lib/supabase/storage";
 
+const audioConfig = getPodcastAudioConfig();
 const customizationUrl =
   process.env.QWEN_VOICE_DESIGN_ENDPOINT ??
   "https://dashscope-intl.aliyuncs.com/api/v1/services/audio/tts/customization";
 const ttsUrl =
   process.env.QWEN_TTS_ENDPOINT ??
   "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
-const voiceDesignModel = optionalEnv("QWEN_VOICE_DESIGN_MODEL") ?? "qwen-voice-design";
-const configuredTtsModel = optionalEnv("QWEN_TTS_MODEL");
+const voiceDesignModel = audioConfig.voiceDesignModel;
+const configuredTtsModel = audioConfig.ttsModel;
 const ttsModel =
   configuredTtsModel && configuredTtsModel !== "cosyvoice-v1"
     ? configuredTtsModel
@@ -71,7 +73,7 @@ async function getWeeklyDigests() {
 
 async function getPodcastVoices(apiKey: string): Promise<Record<PodcastHostKey, HostVoice>> {
   const femaleVoice =
-    optionalEnv("QWEN_PODCAST_FEMALE_VOICE") ??
+    audioConfig.femaleVoice ??
     (await createVoice(apiKey, {
       preferredName: "brit_host",
       prompt:
@@ -81,7 +83,7 @@ async function getPodcastVoices(apiKey: string): Promise<Record<PodcastHostKey, 
     }));
 
   const maleVoice =
-    optionalEnv("QWEN_PODCAST_MALE_VOICE") ??
+    audioConfig.maleVoice ??
     (await createVoice(apiKey, {
       preferredName: "us_host",
       prompt:
@@ -223,7 +225,7 @@ async function concatenateAudio(segmentPaths: string[], outputPath: string) {
     "-codec:a",
     "libmp3lame",
     "-b:a",
-    "96k",
+    audioConfig.audioBitrate,
     outputPath,
   ];
   await run("ffmpeg", args);

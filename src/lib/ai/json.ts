@@ -14,16 +14,16 @@ export function localDigestFallback(input: {
   return {
     layout_type: "concept_explainer",
     title: input.title,
-    dek: "A cautious plain-English digest generated from the available source text.",
+    dek: "A cautious plain-English digest generated from the available source material.",
     front_page_summary: excerpt || "No transcript text was available for this video.",
     what_creator_said: excerpt ? [excerpt.slice(0, 400)] : [],
     plain_english_explanation:
-      "The app could not reach a configured AI provider, so this fallback avoids adding claims beyond the stored transcript or notes.",
+      "The app could not reach a configured AI provider, so this fallback avoids adding claims beyond the stored source material.",
     explanation_levels: {
       beginner:
         "This fallback is being careful: it only points back to the saved source text and does not add new claims. Think of it as a placeholder note until the richer AI digest can run.",
       intermediate:
-        "The configured digest provider was unavailable, so the app preserved the source-backed excerpt and avoided interpretation beyond the transcript or derived notes.",
+        "The configured digest provider was unavailable, so the app preserved the source-backed excerpt and avoided unsupported interpretation.",
       advanced:
         "Provider routing failed for the daily digest task. The fallback keeps the cached source excerpt, avoids unsupported synthesis, and can be regenerated after credentials or provider responses are healthy.",
     },
@@ -41,7 +41,8 @@ export function localDigestFallback(input: {
     ],
     glossary: [],
     topic_links: [],
-    skepticism_notes: `Source type: ${input.transcriptSource}. This fallback does not infer unsupported facts.`,
+    skepticism_notes:
+      "The source material may be partial. This fallback does not infer unsupported facts.",
     source_notes: [],
     follow_up_from_yesterday: "No prior digest available.",
   };

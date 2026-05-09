@@ -31,3 +31,11 @@ Reworked weekly digests from a latest-four recap into a stored "This Week in AI"
 ## 2026-05-09 Daily Follow-Up Fix
 
 Fixed daily "follow-up from yesterday" continuity. Daily generation now receives prior-digest context and stores a deterministic source-backed bridge to the nearest previous daily digest. Added `npm run daily:refresh-follow-ups` and refreshed the live starter daily rows.
+
+## 2026-05-09 Freshness, Podcast, and Calendar Fixes
+
+Updated creator discovery to run hourly, queue previously missed known videos, and log discovery, transcript, summarization, DB write, and UI availability stages. The admin manual refresh now discovers uploads before processing the queue.
+
+Reworked weekly podcast scripts into longer two-host deep dives with configurable target length and TTS settings. Documented that NotebookLM remains a manual external option because there is no stable app API for automated generation.
+
+Added weekly calendar navigation for weekly digest and podcast pages, daily/weekly/podcast "Jump to current" controls, weekly story links to matching daily digest dates, source-note panel removal, skepticism wording cleanup, deeper explanation prompt instructions, follow-up overflow hardening, and weekly markdown artifact cleanup.

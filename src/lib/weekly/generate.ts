@@ -2,6 +2,11 @@ import { generateWeeklyDigestPayload } from "@/lib/ai";
 import { booleanEnv } from "@/lib/config";
 import { getSql } from "@/lib/db";
 import { loadPrompt } from "@/lib/prompts";
+import {
+  buildTwoHostPodcastLines,
+  formatTwoHostPodcastScript,
+} from "@/lib/podcasts/two-host";
+import { getPodcastAudioConfig } from "@/lib/podcasts/config";
 import { uploadGeneratedAsset } from "@/lib/supabase/storage";
 import {
   getSundayToSaturdayWeekRange,
@@ -92,13 +97,17 @@ export async function ensureWeeklyDigestForRange(input: {
 
   const prompt = await loadPrompt("weekly_digest");
   const sourceText = buildWeeklySourceText(daily);
-  const payload = await generateWeeklyDigestPayload({
+  const generatedPayload = await generateWeeklyDigestPayload({
     creatorId: input.creatorId,
     weekStart,
     weekEnd,
     sourceText,
     prompt,
   });
+  const payload = {
+    ...generatedPayload,
+    podcast_script: formatTwoHostPodcastScript(buildTwoHostPodcastLines(generatedPayload)),
+  };
 
   if (existing[0]) {
     await sql`
@@ -167,6 +176,16 @@ async function maybeGeneratePodcastAudio(input: {
   weekStart: string;
 }) {
   const sql = getSql();
+  const audioConfig = getPodcastAudioConfig();
+  if (audioConfig.provider !== "qwen_simple") {
+    console.info("[podcast:audio-skipped]", {
+      weeklyDigestId: input.weeklyDigestId,
+      provider: audioConfig.provider,
+      reason: "Use npm run podcasts:generate for segmented voice-designed audio.",
+    });
+    return null;
+  }
+
   const qwenKey = process.env.QWEN_API_KEY ?? process.env.DASHSCOPE_API_KEY;
   if (!qwenKey || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return null;
@@ -181,7 +200,7 @@ async function maybeGeneratePodcastAudio(input: {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: process.env.QWEN_TTS_MODEL ?? "cosyvoice-v1",
+        model: audioConfig.ttsModel,
         input: { text: input.script },
       }),
     },
@@ -211,7 +230,7 @@ async function maybeGeneratePodcastAudio(input: {
       ${input.weeklyDigestId},
       'podcast_audio',
       'qwen',
-      ${process.env.QWEN_TTS_MODEL ?? "cosyvoice-v1"},
+      ${audioConfig.ttsModel},
       ${input.script.slice(0, 2000)},
       ${storagePath},
       ${publicUrl}

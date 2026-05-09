@@ -19,3 +19,15 @@ Free YouTube transcripts are stored as `youtube_transcript_free`. Gemini fallbac
 ## 2026-05-09: Weekly Digest Archive
 
 The first Nate B. Jones baseline starts with four weekly editions because it covers 28 days. Weekly digests are not capped at four; every completed Sunday-to-Saturday week with daily digests can be stored and shown in the archive. Future weekly editions appear after the week completes, while larger backfills can create older archived weeks.
+
+## 2026-05-09: Freshness-Oriented Cron Split
+
+Creator discovery runs hourly and queue processing runs every five minutes. Discovery is idempotent and queues videos that lack a daily digest and lack an open ingest item, even if the video row already exists. Daily digest writes are keyed by `video_id`, so overlapping or recovered jobs do not create duplicate digests.
+
+## 2026-05-09: Podcast Quality Path
+
+The automated high-quality podcast path is `npm run podcasts:generate`, using a long-form two-host script and Qwen voice-designed segmented TTS. Inline weekly generation does not create default single-voice audio unless `PODCAST_TTS_PROVIDER=qwen_simple` is explicitly selected. NotebookLM is documented as manual because it does not expose a stable app API for this workflow.
+
+## 2026-05-09: Weekly Calendar Navigation
+
+Weekly digest and podcast pages use a `week=YYYY-MM-DD` query parameter that normalizes any selected date to the app's Sunday-to-Saturday week. Weekly story cards link to the corresponding daily digest date and rely on the daily empty state when no daily digest exists.

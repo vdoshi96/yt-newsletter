@@ -22,6 +22,7 @@ export const defaultEnvValues = {
   TRANSCRIPT_RETRY_HOURS: "24",
   MONTHLY_AI_BUDGET_USD: "25",
   MAX_BACKFILL_VIDEOS_PER_JOB: "50",
+  CREATOR_DISCOVERY_LOOKBACK_LIMIT: "10",
   BASELINE_MONTH_VIDEO_LOOKBACK_LIMIT: "150",
   BASELINE_MIN_VIDEO_DURATION_SECONDS: "300",
   MAX_VIDEOS_PROCESSED_PER_CRON_RUN: "3",
@@ -37,6 +38,10 @@ export const defaultEnvValues = {
   QWEN_VOICE_DESIGN_MODEL: "qwen-voice-design",
   QWEN_PODCAST_FEMALE_VOICE: "",
   QWEN_PODCAST_MALE_VOICE: "",
+  PODCAST_SCRIPT_TARGET_MINUTES: "8",
+  PODCAST_GENERATION_MODE: "two_host_deep_dive",
+  PODCAST_TTS_PROVIDER: "qwen_voice_design",
+  PODCAST_AUDIO_BITRATE: "128k",
 } as const;
 
 export function getEnv(name: string, fallback?: string) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import {
   EXPLANATION_LEVEL_KEYS,
   EXPLANATION_LEVEL_LABELS,
@@ -17,28 +17,29 @@ export function ExplanationLevelPanel({
   title: string;
   className?: string;
 }) {
-  const selectId = useId();
   const [selected, setSelected] = useState<ExplanationLevel>("beginner");
 
   return (
     <section className={className ?? "article-column"}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3">
         <h2>{title}</h2>
-        <label className="text-xs font-bold uppercase tracking-[0.18em] text-stone-500">
-          Level
-          <select
-            id={selectId}
-            className="mt-2 h-10 w-full rounded border border-stone-300 bg-white px-3 text-sm normal-case tracking-normal text-stone-950 sm:w-44"
-            value={selected}
-            onChange={(event) => setSelected(event.target.value as ExplanationLevel)}
-          >
-            {EXPLANATION_LEVEL_KEYS.map((level) => (
-              <option key={level} value={level}>
-                {EXPLANATION_LEVEL_LABELS[level]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="grid grid-cols-3 overflow-hidden rounded border border-stone-300 bg-white text-xs font-black uppercase text-stone-700">
+          {EXPLANATION_LEVEL_KEYS.map((level) => (
+            <button
+              key={level}
+              type="button"
+              aria-pressed={selected === level}
+              className={
+                selected === level
+                  ? "bg-stone-900 px-2 py-2 text-white"
+                  : "px-2 py-2 hover:bg-stone-100"
+              }
+              onClick={() => setSelected(level)}
+            >
+              {EXPLANATION_LEVEL_LABELS[level]}
+            </button>
+          ))}
+        </div>
       </div>
       <p className="mt-4">{levels[selected]}</p>
     </section>

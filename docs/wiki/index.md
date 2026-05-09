@@ -6,3 +6,4 @@
 - [Sources](../context/SOURCES.md)
 - [Skills](../context/SKILLS.md)
 - [Log](../context/LOG.md)
+- [Digest Operations](operations.md)

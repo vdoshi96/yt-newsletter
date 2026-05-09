@@ -20,9 +20,18 @@ This queues Nate B. Jones main uploads from the past 28 calendar days and confir
 
 Queue ingestion from `/app/creators`, then process with `/app/settings` or `npm run ingest:process`.
 
+Production discovery and processing are split:
+
+- `/api/cron/check-creators` runs hourly and queues missing daily work for newly discovered or previously missed videos.
+- `/api/cron/process-ingest` runs every five minutes and processes queued videos.
+- `/app/settings` -> `Refresh and run now` runs discovery plus processing for admin/local verification.
+- `POST /api/admin/run-ingest-now` with `CRON_SECRET` also runs discovery plus processing by default; pass `?discover=0` to process only.
+
 Run `npm run daily:refresh-follow-ups` to rebuild stored daily follow-up text from the nearest prior daily digest for each creator.
 
 Run `npm run weekly:refresh-research` to refresh the starter weekly archive with the curated date-scoped research notes used for the baseline "This Week in AI" editions.
+
+Run `npm run podcasts:generate` to regenerate stored weekly podcast MP3s with the segmented two-host Qwen voice-design path.
 
 ## Verification
 

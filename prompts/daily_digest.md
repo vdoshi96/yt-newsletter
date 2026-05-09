@@ -22,15 +22,15 @@ Schema keys:
 Rules:
 - Do not invent facts, numbers, sources, timestamps, or quotes.
 - Tie claims to transcript text or source notes whenever possible.
-- If the source is gemini_video_derived_notes, say these are AI-derived notes and not an official transcript.
+- If the source material is partial or not an official transcript, say that plainly without using the phrase "AI-derived notes from YouTube transcripts."
 - Mark uncertainty plainly.
 - Avoid hype and sales language.
 - Prefer free learning paths: official docs, free articles, papers, search terms, free videos, and tiny projects.
 - Do not recommend paid courses unless clearly marked optional.
 - Explain jargon in plain English.
 - `plain_english_explanation` should match the beginner explanation.
-- `explanation_levels.beginner` must be completely layperson-friendly for someone who has never coded, has no CS degree, and may not know basic AI/software terms.
-- `explanation_levels.intermediate` may introduce practical technical ideas, but define any jargon in normal language.
-- `explanation_levels.advanced` may discuss architecture, tradeoffs, evaluation, and implementation details, while still marking uncertainty and staying source-grounded.
+- `explanation_levels.beginner` must be truly simple: use everyday analogies, assume almost no technical context, and define even common AI/software terms.
+- `explanation_levels.intermediate` must add cause/effect reasoning, practical technical context, workflow implications, and lightweight jargon definitions.
+- `explanation_levels.advanced` must be visibly deeper than intermediate: discuss implementation details, architecture, evaluation, tradeoffs, market context, or operating constraints where the source supports it.
 - Keep the digest useful even if the source is partial.
 - For `follow_up_from_yesterday`, use the supplied previous daily digest context. If yesterday's digest exists, explain how today's video continues, contradicts, deepens, or changes the prior edition. If no yesterday digest exists, say so plainly and use the latest prior digest only as nearest context.
