@@ -14,7 +14,7 @@ For the live starter baseline, run:
 npm run seed:baseline -- --process
 ```
 
-This queues Nate B. Jones videos from the past 28 days and confirms four weekly digest slots.
+This queues Nate B. Jones main uploads from the past 28 calendar days and confirms four weekly digest slots. The baseline fetches deeper than 50 uploads and excludes Shorts-style or very short clips by default.
 
 ## Ingestion
 

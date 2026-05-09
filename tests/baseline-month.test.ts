@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getPastMonthBaselineWindow } from "../src/lib/baseline/month";
+import {
+  getPastMonthBaselineWindow,
+  isBaselineMainVideo,
+} from "../src/lib/baseline/month";
 
 describe("past-month baseline window", () => {
   it("creates exactly four seven-day weekly digest windows", () => {
@@ -21,5 +24,11 @@ describe("past-month baseline window", () => {
     expect(baseline.includesPublishedAt("2026-04-12T00:00:00Z")).toBe(true);
     expect(baseline.includesPublishedAt("2026-05-09T23:59:59Z")).toBe(true);
     expect(baseline.includesPublishedAt("2026-05-10T00:00:00Z")).toBe(false);
+  });
+
+  it("treats long-form uploads as baseline main videos and filters Shorts-like clips", () => {
+    expect(isBaselineMainVideo({ duration_seconds: 1841, title: "Main upload" })).toBe(true);
+    expect(isBaselineMainVideo({ duration_seconds: 70, title: "Short #shorts" })).toBe(false);
+    expect(isBaselineMainVideo({ duration_seconds: 134, title: "Shorts-style clip" })).toBe(false);
   });
 });

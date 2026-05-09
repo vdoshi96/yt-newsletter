@@ -88,11 +88,11 @@ async function ensureBaselineWeekDigest(
         week_end = ${window.weekEnd},
         title = ${payload.title},
         newsletter_markdown = ${payload.newsletter_markdown},
-        ranked_topics = ${JSON.stringify(payload.ranked_topics)}::jsonb,
+        ranked_topics = ${sql.json(payload.ranked_topics)},
         what_changed = ${payload.what_changed},
-        what_to_do_next = ${JSON.stringify(payload.what_to_do_next)}::jsonb,
+        what_to_do_next = ${sql.json(payload.what_to_do_next)},
         podcast_script = ${payload.podcast_script},
-        full_digest_json = ${JSON.stringify(payload)}::jsonb,
+        full_digest_json = ${sql.json(payload)},
         updated_at = now()
       where id = ${existingId}
     `;
@@ -118,11 +118,11 @@ async function ensureBaselineWeekDigest(
       ${window.weekEnd},
       ${payload.title},
       ${payload.newsletter_markdown},
-      ${JSON.stringify(payload.ranked_topics)}::jsonb,
+      ${sql.json(payload.ranked_topics)},
       ${payload.what_changed},
-      ${JSON.stringify(payload.what_to_do_next)}::jsonb,
+      ${sql.json(payload.what_to_do_next)},
       ${payload.podcast_script},
-      ${JSON.stringify(payload)}::jsonb
+      ${sql.json(payload)}
     )
     returning id
   `;

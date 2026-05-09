@@ -45,6 +45,7 @@ type YouTubeChannelResponse = {
 };
 
 type PlaylistItemsResponse = {
+  nextPageToken?: string;
   items?: Array<{
     snippet?: {
       title?: string;
@@ -77,7 +78,7 @@ type VideosResponse = {
 
 export async function discoverCreatorVideos(inputUrl: string, requestedCount: number) {
   const parsed = parseYouTubeInput(inputUrl);
-  const count = Math.max(1, Math.min(requestedCount, Number(process.env.MAX_BACKFILL_VIDEOS_PER_JOB ?? 50)));
+  const count = Math.max(1, requestedCount);
   const apiKey = process.env.YOUTUBE_API_KEY;
 
   if (apiKey) {
@@ -98,25 +99,14 @@ async function discoverWithYouTubeApi(
     throw new Error("Could not find the channel uploads playlist.");
   }
 
-  const playlist = await youtubeFetch<PlaylistItemsResponse>("playlistItems", apiKey, {
-    part: "snippet",
-    playlistId: uploadsPlaylistId,
-    maxResults: String(count),
-  });
-
-  const ids = (playlist.items ?? [])
+  const playlistItems = await fetchPlaylistItems(apiKey, uploadsPlaylistId, count);
+  const ids = playlistItems
     .map((item) => item.snippet?.resourceId?.videoId)
     .filter((id): id is string => Boolean(id));
 
-  const details = ids.length
-    ? await youtubeFetch<VideosResponse>("videos", apiKey, {
-        part: "snippet,contentDetails",
-        id: ids.join(","),
-        maxResults: String(count),
-      })
-    : { items: [] };
+  const detailItems = await fetchVideoDetails(apiKey, ids);
 
-  const videos = (details.items ?? []).map((item) => ({
+  const videos = detailItems.map((item) => ({
     youtube_video_id: item.id,
     title: item.snippet?.title ?? "Untitled video",
     description: item.snippet?.description ?? null,
@@ -144,6 +134,40 @@ async function discoverWithYouTubeApi(
     },
     videos,
   };
+}
+
+async function fetchPlaylistItems(apiKey: string, playlistId: string, count: number) {
+  const items: NonNullable<PlaylistItemsResponse["items"]> = [];
+  let pageToken: string | undefined;
+
+  while (items.length < count) {
+    const page = await youtubeFetch<PlaylistItemsResponse>("playlistItems", apiKey, {
+      part: "snippet",
+      playlistId,
+      maxResults: String(Math.min(50, count - items.length)),
+      ...(pageToken ? { pageToken } : {}),
+    });
+    items.push(...(page.items ?? []));
+    pageToken = page.nextPageToken;
+    if (!pageToken) break;
+  }
+
+  return items;
+}
+
+async function fetchVideoDetails(apiKey: string, ids: string[]) {
+  const items: NonNullable<VideosResponse["items"]> = [];
+  for (let index = 0; index < ids.length; index += 50) {
+    const chunk = ids.slice(index, index + 50);
+    if (!chunk.length) continue;
+    const details = await youtubeFetch<VideosResponse>("videos", apiKey, {
+      part: "snippet,contentDetails",
+      id: chunk.join(","),
+      maxResults: String(chunk.length),
+    });
+    items.push(...(details.items ?? []));
+  }
+  return items;
 }
 
 async function resolveChannel(parsed: ParsedYouTubeInput, apiKey: string) {

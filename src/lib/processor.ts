@@ -1,6 +1,7 @@
 import { generateDailyDigestPayload, generateGeminiVideoNotes } from "@/lib/ai";
 import { booleanEnv, numberEnv } from "@/lib/config";
 import { getSql } from "@/lib/db";
+import { digestDateFromPublishedAt } from "@/lib/digests/date";
 import { loadPrompt } from "@/lib/prompts";
 import { fetchFreeTranscript } from "@/lib/youtube/transcripts";
 import { ensurePastMonthWeeklyDigests } from "@/lib/weekly/baseline";
@@ -13,7 +14,7 @@ type QueueItem = {
   youtube_video_id: string;
   title: string;
   url: string;
-  published_at: string | null;
+  published_at: string | Date | null;
 };
 
 export async function processIngestQueue(limit = numberEnv("MAX_VIDEOS_PROCESSED_PER_CRON_RUN", 3)) {
@@ -171,7 +172,7 @@ async function ensureTranscript(item: QueueItem) {
         ${freeTranscript.source},
         ${freeTranscript.status},
         ${freeTranscript.transcript_text},
-        ${JSON.stringify(freeTranscript.timed_segments)}::jsonb,
+        ${sql.json(freeTranscript.timed_segments)},
         null,
         false,
         null
@@ -204,7 +205,7 @@ async function ensureTranscript(item: QueueItem) {
           'completed',
           null,
           null,
-          ${JSON.stringify(notes)}::jsonb,
+          ${sql.json(toJsonParameter(notes))},
           true,
           ${freeTranscript.retry_after}
         )
@@ -265,9 +266,7 @@ async function ensureDailyDigest(
     transcriptSource: transcript.source,
     prompt,
   });
-  const digestDate = item.published_at
-    ? item.published_at.slice(0, 10)
-    : new Date().toISOString().slice(0, 10);
+  const digestDate = digestDateFromPublishedAt(item.published_at);
 
   const rows = await sql<{ id: string }[]>`
     insert into daily_digests (
@@ -300,17 +299,21 @@ async function ensureDailyDigest(
       ${payload.front_page_summary},
       ${payload.plain_english_explanation},
       ${payload.why_it_matters},
-      ${JSON.stringify(payload.what_to_do_next)}::jsonb,
-      ${JSON.stringify(payload.free_learning_plan)}::jsonb,
-      ${JSON.stringify(payload.glossary)}::jsonb,
-      ${JSON.stringify(payload.topic_links)}::jsonb,
+      ${sql.json(payload.what_to_do_next)},
+      ${sql.json(payload.free_learning_plan)},
+      ${sql.json(payload.glossary)},
+      ${sql.json(payload.topic_links)},
       ${payload.skepticism_notes},
-      ${JSON.stringify(payload.source_notes)}::jsonb,
-      ${JSON.stringify(payload)}::jsonb
+      ${sql.json(payload.source_notes)},
+      ${sql.json(toJsonParameter(payload))}
     )
     returning id
   `;
   return rows[0].id;
+}
+
+function toJsonParameter(value: unknown) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 async function syncJobCounts(jobId: string) {

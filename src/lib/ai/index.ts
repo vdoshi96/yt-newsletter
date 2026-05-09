@@ -107,10 +107,26 @@ export async function generateWeeklyDigestPayload(input: {
     }
   }
 
+  const fallbackTitles = Array.from(input.sourceText.matchAll(/^Title:\s*(.+)$/gm))
+    .map((match) => match[1])
+    .slice(0, 8);
+
   return weeklyDigestSchema.parse({
-    title: "Weekly digest",
-    newsletter_markdown: `# Weekly digest\n\n${input.sourceText.slice(0, 3000)}`,
-    ranked_topics: [],
+    title: `Weekly digest: ${input.weekStart} to ${input.weekEnd}`,
+    newsletter_markdown:
+      `# Weekly digest: ${input.weekStart} to ${input.weekEnd}\n\n` +
+      "This source-backed fallback was generated because the configured weekly providers returned invalid JSON. It avoids adding unsupported claims and uses the cached daily digest text only.\n\n" +
+      "## Videos covered\n\n" +
+      (fallbackTitles.length
+        ? fallbackTitles.map((title) => `- ${title}`).join("\n")
+        : "- No daily digest titles were available.") +
+      "\n\n## Source-backed recap\n\n" +
+      input.sourceText.slice(0, 2600),
+    ranked_topics: fallbackTitles.slice(0, 5).map((title, index) => ({
+      topic: title,
+      importance_score: Math.max(0.1, 1 - index * 0.12),
+      why_it_matters: "This was one of the source-backed daily digest themes for the week.",
+    })),
     what_changed:
       "Provider calls were unavailable, so this fallback summarizes only the cached daily digest text.",
     what_to_do_next: ["Review the daily digests and choose one free mini-project."],

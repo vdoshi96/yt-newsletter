@@ -44,6 +44,27 @@ describe("digest schemas", () => {
     ).toThrow();
   });
 
+  it("normalizes null optional follow-up text from providers", () => {
+    const parsed = dailyDigestSchema.parse({
+      layout_type: "single_big_story",
+      title: "A digest",
+      dek: "Short dek",
+      front_page_summary: "Summary",
+      plain_english_explanation: "Explanation",
+      why_it_matters: "Why",
+      what_creator_said: [],
+      what_to_do_next: [],
+      free_learning_plan: [],
+      glossary: [],
+      topic_links: [],
+      skepticism_notes: "No uncertainty notes.",
+      source_notes: [],
+      follow_up_from_yesterday: null,
+    });
+
+    expect(parsed.follow_up_from_yesterday).toBe("No prior digest available.");
+  });
+
   it("accepts a weekly newsletter payload with a podcast script", () => {
     const parsed = weeklyDigestSchema.parse({
       title: "This week in practical AI",
@@ -56,5 +77,19 @@ describe("digest schemas", () => {
     });
 
     expect(parsed.podcast_script).toContain("This week");
+  });
+
+  it("normalizes weekly provider scores from a 0-100 scale", () => {
+    const parsed = weeklyDigestSchema.parse({
+      title: "This week in AI",
+      newsletter_markdown: "# Week",
+      ranked_topics: [{ topic: "Agents", importance_score: 85, why_it_matters: "Important." }],
+      what_changed: "The focus shifted.",
+      what_to_do_next: [],
+      free_learning_plan: [],
+      podcast_script: "This week...",
+    });
+
+    expect(parsed.ranked_topics[0].importance_score).toBe(0.85);
   });
 });

@@ -3,7 +3,7 @@ import { estimateIngestSeconds } from "@/lib/jobs/progress";
 import type { DiscoveredCreator, DiscoveredVideo } from "@/lib/youtube/client";
 import { discoverCreatorVideos } from "@/lib/youtube/client";
 import type { Creator, IngestJob } from "@/lib/types";
-import { getPastMonthBaselineWindow } from "@/lib/baseline/month";
+import { getPastMonthBaselineWindow, isBaselineMainVideo } from "@/lib/baseline/month";
 import { numberEnv } from "@/lib/config";
 
 export async function getCreatorsForUser(userId: string) {
@@ -64,10 +64,10 @@ export async function startPastMonthBaselineForCreatorUrl(input: {
   now?: Date;
 }) {
   const baseline = getPastMonthBaselineWindow(input.now);
-  const lookbackLimit = numberEnv("BASELINE_MONTH_VIDEO_LOOKBACK_LIMIT", 50);
+  const lookbackLimit = numberEnv("BASELINE_MONTH_VIDEO_LOOKBACK_LIMIT", 150);
   const discovery = await discoverCreatorVideos(input.creatorUrl, lookbackLimit);
   const videosInBaseline = discovery.videos.filter((video) =>
-    baseline.includesPublishedAt(video.published_at),
+    baseline.includesPublishedAt(video.published_at) && isBaselineMainVideo(video),
   );
   const creatorId = await upsertCreator(discovery.creator);
   await linkUserCreator(input.userId, creatorId);
@@ -103,6 +103,55 @@ export async function upsertCreator(creator: DiscoveredCreator) {
       returning id
     `;
     return byUrl[0].id;
+  }
+
+  const existingChannel = await sql<{ id: string }[]>`
+    select id
+    from creators
+    where youtube_channel_id = ${creator.youtube_channel_id}
+    limit 1
+  `;
+  if (existingChannel[0]) {
+    const updated = await sql<{ id: string }[]>`
+      update creators
+      set
+        handle = coalesce(${creator.handle}, handle),
+        title = ${creator.title},
+        description = ${creator.description},
+        thumbnail_url = ${creator.thumbnail_url},
+        channel_url = ${creator.channel_url},
+        updated_at = now()
+      where id = ${existingChannel[0].id}
+      returning id
+    `;
+    return updated[0].id;
+  }
+
+  if (creator.handle) {
+    const placeholders = await sql<{ id: string }[]>`
+      select id
+      from creators
+      where youtube_channel_id is null
+        and lower(handle) = lower(${creator.handle})
+      order by created_at asc
+      limit 1
+    `;
+    if (placeholders[0]) {
+      const updated = await sql<{ id: string }[]>`
+        update creators
+        set
+          youtube_channel_id = ${creator.youtube_channel_id},
+          handle = ${creator.handle},
+          title = ${creator.title},
+          description = ${creator.description},
+          thumbnail_url = ${creator.thumbnail_url},
+          channel_url = ${creator.channel_url},
+          updated_at = now()
+        where id = ${placeholders[0].id}
+        returning id
+      `;
+      return updated[0].id;
+    }
   }
 
   const rows = await sql<{ id: string }[]>`

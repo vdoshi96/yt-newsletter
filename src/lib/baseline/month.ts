@@ -1,5 +1,6 @@
 export const BASELINE_WEEK_COUNT = 4;
 export const BASELINE_DAYS = BASELINE_WEEK_COUNT * 7;
+export const DEFAULT_BASELINE_MIN_DURATION_SECONDS = 300;
 
 export type BaselineWeekWindow = {
   weekStart: string;
@@ -39,6 +40,23 @@ export function getPastMonthBaselineWindow(now = new Date()) {
       return date >= startInclusive && date <= endInclusive;
     },
   };
+}
+
+export function isBaselineMainVideo(video: {
+  duration_seconds: number | null;
+  title?: string | null;
+}) {
+  const minDuration = Number(
+    process.env.BASELINE_MIN_VIDEO_DURATION_SECONDS ??
+      DEFAULT_BASELINE_MIN_DURATION_SECONDS,
+  );
+  const duration = video.duration_seconds ?? 0;
+  if (duration < minDuration) return false;
+
+  const title = video.title?.toLowerCase() ?? "";
+  if (title.includes("#shorts") || title.includes(" #short ")) return false;
+
+  return true;
 }
 
 function utcDateOnly(date: Date) {

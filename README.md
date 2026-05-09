@@ -71,6 +71,7 @@ SUPABASE_STORAGE_BUCKET
 MONTHLY_AI_BUDGET_USD
 MAX_BACKFILL_VIDEOS_PER_JOB
 BASELINE_MONTH_VIDEO_LOOKBACK_LIMIT
+BASELINE_MIN_VIDEO_DURATION_SECONDS
 MAX_VIDEOS_PROCESSED_PER_CRON_RUN
 TRANSCRIPT_RETRY_HOURS
 GENERATE_IMAGES
@@ -105,7 +106,7 @@ Queue and process the baseline in one run:
 npm run seed:baseline -- --process
 ```
 
-The baseline covers the past 28 days of videos and creates exactly four seven-day weekly digest slots. The app also exposes this from `/app/settings` with “Seed past month baseline.”
+The baseline covers the past 28 calendar days as four seven-day weekly digest slots. For Nate B. Jones, it intentionally filters to main uploads by default: it fetches deeper than 50 uploads, excludes Shorts-style titles, and excludes videos shorter than `BASELINE_MIN_VIDEO_DURATION_SECONDS` seconds. This avoids counting YouTube Shorts or quick clips as daily baseline videos. The app also exposes this from `/app/settings` with “Seed past month baseline.”
 
 ## Manual Ingestion
 
@@ -161,6 +162,7 @@ vercel env add FIRST_ADMIN_PASSWORD production
 vercel env add CRON_SECRET production
 vercel env add COOKIE_SECRET production
 vercel env add BASELINE_MONTH_VIDEO_LOOKBACK_LIMIT production
+vercel env add BASELINE_MIN_VIDEO_DURATION_SECONDS production
 vercel --prod
 ```
 

@@ -71,11 +71,11 @@ export async function ensureWeeklyDigestForVideoWeek(input: {
       ${weekEnd},
       ${payload.title},
       ${payload.newsletter_markdown},
-      ${JSON.stringify(payload.ranked_topics)}::jsonb,
+      ${sql.json(payload.ranked_topics)},
       ${payload.what_changed},
-      ${JSON.stringify(payload.what_to_do_next)}::jsonb,
+      ${sql.json(payload.what_to_do_next)},
       ${payload.podcast_script},
-      ${JSON.stringify(payload)}::jsonb
+      ${sql.json(payload)}
     )
     on conflict (creator_id, week_start) do nothing
     returning id

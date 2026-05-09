@@ -25,6 +25,15 @@ const sourceNoteSchema = z.object({
   note: z.string().min(1),
 });
 
+const defaultedString = (fallback: string) =>
+  z.preprocess((value) => (value === null || value === undefined ? fallback : value), z.string());
+
+const importanceScoreSchema = z.preprocess((value) => {
+  if (typeof value !== "number") return value;
+  if (value > 1 && value <= 100) return value / 100;
+  return value;
+}, z.number().min(0).max(1));
+
 export const dailyDigestSchema = z.object({
   layout_type: layoutTypeSchema,
   title: z.string().min(1),
@@ -39,7 +48,7 @@ export const dailyDigestSchema = z.object({
   topic_links: z.array(linkSchema).default([]),
   skepticism_notes: z.string().min(1),
   source_notes: z.array(sourceNoteSchema).default([]),
-  follow_up_from_yesterday: z.string().default("No prior digest available."),
+  follow_up_from_yesterday: defaultedString("No prior digest available."),
 });
 
 export type DailyDigestPayload = z.infer<typeof dailyDigestSchema>;
@@ -51,7 +60,7 @@ export const weeklyDigestSchema = z.object({
     .array(
       z.object({
         topic: z.string().min(1),
-        importance_score: z.number().min(0).max(1),
+        importance_score: importanceScoreSchema,
         why_it_matters: z.string().min(1),
       }),
     )

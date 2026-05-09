@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 1/2 MVP scaffold is implemented locally.
+Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase database.
 
 ## What Exists
 
@@ -15,6 +15,7 @@ Phase 1/2 MVP scaffold is implemented locally.
 - Daily digest UI
 - Weekly digest and podcast pages
 - One-month baseline flow for Nate B. Jones with four weekly digest slots
+- Baseline video filtering that excludes Shorts-style and very short clips from the live starter data
 - Prompt files and Zod validation
 - Focused tests for parsing, auth, schemas, progress, and date/video selection
 
@@ -22,11 +23,11 @@ Phase 1/2 MVP scaffold is implemented locally.
 
 Last known local checks:
 
-- `npm test`: passing, 14 tests
+- `npm test`: passing, 19 tests
 - `npm run lint`: passing
 - `npm run build`: passing
 
-## Known Issues
+## Deployment Notes
 
-- Local `.env.local` is missing `SUPABASE_SERVICE_ROLE_KEY`.
-- Current `DATABASE_URL`, `DATABASE_CONNECTION_STRING`, and `DIRECT_URL` previously did not authenticate, so migration/seed/live baseline population may be blocked until those credentials are corrected.
+- Local `DATABASE_URL` and `DIRECT_URL` authenticate after rebuilding their embedded password from `DATABASE_PASSWORD`.
+- If production still shows a Postgres auth error, refresh Vercel's `DATABASE_URL` with the same URL-encoded password value used locally, then redeploy.
