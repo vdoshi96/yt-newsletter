@@ -4,7 +4,6 @@ export type AiTaskType =
   | "daily_structured_digest"
   | "daily_plain_english_explanation"
   | "weekly_digest"
-  | "video_fallback_notes"
   | "dashboard_image"
   | "podcast_audio"
   | "podcast_script";

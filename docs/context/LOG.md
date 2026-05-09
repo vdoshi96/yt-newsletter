@@ -43,3 +43,7 @@ Added weekly calendar navigation for weekly digest and podcast pages, daily/week
 ## 2026-05-09 Gemini Podcast Hosts
 
 Switched the automated high-quality podcast path to Gemini Flash native multi-speaker TTS by default. Weekly casts now rotate between Puck/Kora and Achird/Silafat, and generated scripts open with host introductions and a little source-grounded podcast banter before moving into the digest analysis. The Qwen voice-design path remains available as an explicit provider.
+
+## 2026-05-09 Daily Digest Grounding Incident
+
+Confirmed two 2026-05-09 daily digests were generated from zero-character `gemini_video_derived_notes` rows after transcript fetch missed, then the queue marked those items completed. Added a hard transcript validation gate, removed daily title/metadata and Gemini-note fallback paths, required transcript quote anchors after generation, separated Plain English from the three CS-background levels, added `npm run daily:regenerate`, and regenerated both affected rows from verified `youtube_transcript_free` transcripts. The old Gemini-derived transcript rows are now marked `failed`.

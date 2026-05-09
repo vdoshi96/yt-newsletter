@@ -25,14 +25,16 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 - Weekly digest and podcast calendar navigation
 - Prompt files and Zod validation
 - Focused tests for parsing, auth, schemas, progress, and date/video selection
+- Hard transcript-grounding gate for daily digests and safe daily regeneration command
 
 ## Verification
 
 Last known local checks:
 
-- `npm test`: passing, 35 tests
-- `npm run lint`: passing after current branch changes
-- `npm run build`: passing after current branch changes
+- `npm test`: passing, 47 tests
+- `npm run lint`: passing
+- `npx tsc --noEmit`: passing
+- `npm run build`: passing
 
 ## Deployment Notes
 

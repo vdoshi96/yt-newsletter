@@ -5,7 +5,7 @@
 Production uses two Vercel Cron entries:
 
 - `/api/cron/check-creators` runs hourly at minute 2. It discovers recent uploads for every linked creator, upserts the latest videos, and queues any video that does not already have a daily digest or an open ingest item.
-- `/api/cron/process-ingest` runs every five minutes. It fetches transcripts or fallback source material, generates the daily digest, writes it idempotently by `video_id`, and then checks whether completed weekly digests are now available.
+- `/api/cron/process-ingest` runs every five minutes. It fetches verified YouTube transcripts, generates the daily digest only after transcript validation passes, writes it idempotently by `video_id`, and then checks whether completed weekly digests are now available.
 
 This means a newly published YouTube video should be discovered within about one hour and processed on the next five-minute queue run. If the hourly discovery cron is missed, the next hourly run recovers because discovery also checks already-known videos that are missing daily digests.
 
@@ -15,15 +15,36 @@ Manual verification paths:
 - For API/local testing, `POST /api/admin/run-ingest-now` with `CRON_SECRET` runs discovery plus processing by default. Add `?discover=0` to process only already-queued work.
 - For CLI queue processing only, use `npm run ingest:process`.
 
-Logs are emitted around creator discovery, transcript fetch, fallback notes, summarization, database writes, and UI availability. Search platform logs for the `[ingest:*]` prefix.
+Logs are emitted around creator discovery, transcript fetch, summarization, database writes, and UI availability. Search platform logs for the `[ingest:*]` prefix.
+
+## Daily Transcript Grounding
+
+Daily digests must never be generated from title-only, metadata-only, stale placeholder, or model-derived video notes. The hard gate before LLM generation requires:
+
+- a transcript row tied to the exact `video_id`;
+- `source = youtube_transcript_free`;
+- `status = completed`;
+- non-placeholder transcript text;
+- transcript length of at least `DAILY_DIGEST_MIN_TRANSCRIPT_CHARS` characters, default `1200`;
+- a recorded transcript source timestamp.
+
+If transcript extraction fails, the ingest item waits for the transcript retry window instead of publishing a digest. The daily prompt excludes the video title and forbids title, description, thumbnail, channel metadata, prior knowledge, or search results as evidence. The post-generation check requires quote anchors that appear in the transcript.
+
+To safely regenerate a date after a grounding issue:
+
+```bash
+npm run daily:regenerate -- --date=YYYY-MM-DD
+```
+
+See [Daily Digest Grounding Incident: 2026-05-09](daily-digest-grounding-incident-2026-05-09.md) for the full incident write-up and QA checklist.
 
 ## Digest Prompt Behavior
 
-Daily and weekly prompts require visibly different explanation depths:
+Daily and weekly prompts require visibly different explanation depths. Daily digests also keep the shared Plain English Explanation separate from the three CS-background levels:
 
-- Beginner: truly simple, layperson-first foundations.
-- Intermediate: practical technical context, cause/effect, workflows, cost, and evaluation.
-- Expert: deeper implementation, architecture, tradeoffs, market context, and operating constraints when source material supports it.
+- Level 1: Beginner CS Background, for readers with basic coding knowledge.
+- Level 2: Intermediate CS Background, for readers comfortable with APIs, backend systems, databases, queues, embeddings, evals, and LLM basics.
+- Level 3: Advanced CS / AI Systems Background, for readers comfortable with agentic systems, inference pipelines, retrieval, model routing, observability, and production ML/LLM failure modes.
 
 The skepticism section must not use the phrase "AI-derived notes from YouTube transcripts." Stored digests are also cleaned at parse time so older rows do not keep showing that wording.
 

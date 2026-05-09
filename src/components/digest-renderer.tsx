@@ -16,7 +16,7 @@ export function DigestRenderer({ digest }: { digest: DailyDigestPayload }) {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <section>
-          <h2 className="section-kicker">Front page summary</h2>
+          <h2 className="section-kicker">TL;DR</h2>
           <p className="newspaper-lede">{digest.front_page_summary}</p>
         </section>
         <aside className="rounded-lg border border-amber-300 bg-amber-50/60 p-5">
@@ -27,14 +27,21 @@ export function DigestRenderer({ digest }: { digest: DailyDigestPayload }) {
 
       <div className="mt-8 grid gap-6 md:grid-cols-2">
         <DigestSection title="What the creator said" items={digest.what_creator_said} />
-        <DigestSection title="What to do next" items={digest.what_to_do_next} />
+        <DigestSection title="Actionable takeaways" items={digest.what_to_do_next} />
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1fr_0.85fr]">
+      <div className="mt-8 grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+        <section className="article-column">
+          <h2>Plain English Explanation</h2>
+          <p>{digest.plain_english_explanation}</p>
+        </section>
         <ExplanationLevelPanel
-          title="Plain-English explanation"
+          title="CS Background Levels"
           levels={digest.explanation_levels}
         />
+      </div>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_0.85fr]">
         <section className="article-column">
           <h2>Why this matters</h2>
           <p>{digest.why_it_matters}</p>
@@ -63,6 +70,11 @@ export function DigestRenderer({ digest }: { digest: DailyDigestPayload }) {
         </section>
         <DigestSection title="Free learning path" items={digest.free_learning_plan} />
       </div>
+
+      <div className="mt-8 grid gap-6 md:grid-cols-2">
+        <ConceptsToLearn digest={digest} />
+        <TranscriptGrounding digest={digest} />
+      </div>
     </article>
   );
 }
@@ -76,6 +88,82 @@ function DigestSection({ title, items }: { title: string; items: string[] }) {
           <li>No items available yet.</li>
         ) : (
           items.map((item) => <li key={item}>{item}</li>)
+        )}
+      </ul>
+    </section>
+  );
+}
+
+function ConceptsToLearn({ digest }: { digest: DailyDigestPayload }) {
+  const groups = [
+    ["Beginner", digest.concepts_to_learn.beginner],
+    ["Intermediate", digest.concepts_to_learn.intermediate],
+    ["Advanced", digest.concepts_to_learn.advanced],
+  ] as const;
+
+  return (
+    <section className="ink-panel">
+      <h2 className="section-kicker">Concepts to learn</h2>
+      <div className="mt-3 space-y-4">
+        {groups.map(([label, concepts]) => (
+          <div key={label}>
+            <h3 className="text-sm font-black text-slate-950">{label}</h3>
+            <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-600">
+              {concepts.length ? (
+                concepts.map((concept) => <li key={`${label}-${concept}`}>{concept}</li>)
+              ) : (
+                <li>No concepts listed yet.</li>
+              )}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function TranscriptGrounding({ digest }: { digest: DailyDigestPayload }) {
+  const grounding = digest.transcript_grounding;
+
+  return (
+    <section className="ink-panel">
+      <h2 className="section-kicker">Transcript grounding</h2>
+      <dl className="mt-3 grid gap-3 text-sm leading-6 text-slate-600">
+        <div>
+          <dt className="font-bold text-slate-950">Source</dt>
+          <dd>{grounding.transcript_source}</dd>
+        </div>
+        <div>
+          <dt className="font-bold text-slate-950">Transcript length</dt>
+          <dd>{grounding.transcript_length.toLocaleString()} characters</dd>
+        </div>
+        <div>
+          <dt className="font-bold text-slate-950">Video ID</dt>
+          <dd className="break-all">{grounding.video_id}</dd>
+        </div>
+        <div>
+          <dt className="font-bold text-slate-950">Generated</dt>
+          <dd>{grounding.generation_timestamp}</dd>
+        </div>
+        {grounding.generation_model ? (
+          <div>
+            <dt className="font-bold text-slate-950">Model</dt>
+            <dd>{grounding.generation_model}</dd>
+          </div>
+        ) : null}
+      </dl>
+      <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
+        {grounding.key_excerpts.length ? (
+          grounding.key_excerpts.map((excerpt) => (
+            <li key={`${excerpt.timestamp ?? "excerpt"}-${excerpt.quote}`}>
+              {excerpt.timestamp ? (
+                <span className="font-bold text-slate-950">{excerpt.timestamp}: </span>
+              ) : null}
+              <span>{excerpt.quote}</span>
+            </li>
+          ))
+        ) : (
+          <li>No transcript excerpts stored for this digest.</li>
         )}
       </ul>
     </section>

@@ -12,9 +12,9 @@ Supabase JS is used lazily for Storage uploads when generated audio/image assets
 
 The LLM returns JSON and a `layout_type` from a fixed enum. React chooses the layout; models never generate UI code.
 
-## 2026-05-09: Transcript Honesty
+## 2026-05-09: Transcript-Grounded Daily Digests
 
-Free YouTube transcripts are stored as `youtube_transcript_free`. Gemini fallback output is stored as `gemini_video_derived_notes`, never as an official transcript.
+Free YouTube transcripts are stored as `youtube_transcript_free`. Daily digests may only be generated from verified transcript text tied to the exact `video_id`; model-derived notes, title-only metadata, descriptions, thumbnails, and prior knowledge are forbidden as source evidence. Missing or invalid transcripts keep ingestion waiting/failed instead of publishing a digest. Regeneration uses `npm run daily:regenerate -- --date=YYYY-MM-DD`, which invalidates old non-transcript fallback records after a replacement digest passes transcript grounding checks.
 
 ## 2026-05-09: Weekly Digest Archive
 

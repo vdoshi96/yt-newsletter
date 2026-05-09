@@ -1,4 +1,4 @@
-import { generateDailyDigestPayload, generateGeminiVideoNotes } from "@/lib/ai";
+import { generateDailyDigestPayload } from "@/lib/ai";
 import { booleanEnv, numberEnv } from "@/lib/config";
 import { getSql } from "@/lib/db";
 import { digestDateFromPublishedAt } from "@/lib/digests/date";
@@ -6,6 +6,7 @@ import {
   buildDailyFollowUp,
   type DailyFollowUpDigest,
 } from "@/lib/digests/follow-up";
+import type { DailyDigestTranscriptRecord } from "@/lib/digests/grounding";
 import { selectVideoIdsNeedingIngestion } from "@/lib/ingest/discovery";
 import { loadPrompt } from "@/lib/prompts";
 import { fetchFreeTranscript } from "@/lib/youtube/transcripts";
@@ -147,12 +148,13 @@ async function processQueueItem(item: QueueItem) {
       where id = ${item.job_id}
     `;
 
+    const completedTranscript = transcript as DailyDigestTranscriptRecord;
     logIngest("summarization-started", {
       itemId: item.item_id,
       videoId: item.video_id,
-      source: transcript.source,
+      source: completedTranscript.source,
     });
-    await ensureDailyDigest(item, transcript);
+    await ensureDailyDigest(item, completedTranscript);
     await sql`
       update ingest_job_items
       set status = 'completed', completed_at = now(), updated_at = now()
@@ -181,18 +183,22 @@ async function processQueueItem(item: QueueItem) {
 
 async function ensureTranscript(item: QueueItem) {
   const sql = getSql();
-  const existing = await sql<
-    Array<{
-      status: string;
-      source: string;
-      transcript_text: string | null;
-      derived_notes: unknown | null;
-    }>
-  >`
-    select status, source, transcript_text, derived_notes
+  const existing = await sql<DailyDigestTranscriptRecord[]>`
+    select
+      id,
+      video_id,
+      status,
+      source,
+      transcript_text,
+      timed_segments,
+      derived_notes,
+      created_at::text,
+      updated_at::text
     from transcripts
     where video_id = ${item.video_id}
       and status = 'completed'
+      and source = 'youtube_transcript_free'
+      and transcript_text is not null
     order by created_at desc
     limit 1
   `;
@@ -211,7 +217,7 @@ async function ensureTranscript(item: QueueItem) {
   });
   const freeTranscript = await fetchFreeTranscript(item.youtube_video_id);
   if (freeTranscript.status === "completed") {
-    await sql`
+    const rows = await sql<DailyDigestTranscriptRecord[]>`
       insert into transcripts (
         video_id,
         source,
@@ -232,57 +238,23 @@ async function ensureTranscript(item: QueueItem) {
         false,
         null
       )
+      returning
+        id,
+        video_id,
+        source,
+        status,
+        transcript_text,
+        timed_segments,
+        derived_notes,
+        created_at::text,
+        updated_at::text
     `;
     logIngest("transcript-fetch-completed", {
       videoId: item.video_id,
       source: freeTranscript.source,
       characters: freeTranscript.transcript_text.length,
     });
-    return freeTranscript;
-  }
-
-  if (process.env.GEMINI_API_KEY) {
-    try {
-      logIngest("video-notes-fallback-started", {
-        videoId: item.video_id,
-        youtubeVideoId: item.youtube_video_id,
-      });
-      const notes = await generateGeminiVideoNotes({
-        creatorId: item.creator_id,
-        videoId: item.video_id,
-        youtubeUrl: item.url,
-      });
-      await sql`
-        insert into transcripts (
-          video_id,
-          source,
-          status,
-          transcript_text,
-          timed_segments,
-          derived_notes,
-          needs_retry,
-          retry_after
-        )
-        values (
-          ${item.video_id},
-          'gemini_video_derived_notes',
-          'completed',
-          null,
-          null,
-          ${sql.json(toJsonParameter(notes))},
-          true,
-          ${freeTranscript.retry_after}
-        )
-      `;
-      return {
-        status: "completed",
-        source: "gemini_video_derived_notes",
-        transcript_text: null,
-        derived_notes: notes,
-      };
-    } catch (error) {
-      console.warn(`Gemini video fallback failed: ${(error as Error).message}`);
-    }
+    return rows[0];
   }
 
   await sql`
@@ -310,11 +282,7 @@ async function ensureTranscript(item: QueueItem) {
 
 async function ensureDailyDigest(
   item: QueueItem,
-  transcript: {
-    source: string;
-    transcript_text: string | null;
-    derived_notes?: unknown | null;
-  },
+  transcript: DailyDigestTranscriptRecord,
 ) {
   const sql = getSql();
   const existing = await sql<{ id: string }[]>`
@@ -329,9 +297,6 @@ async function ensureDailyDigest(
   }
 
   const prompt = await loadPrompt("daily_digest");
-  const transcriptOrNotes =
-    transcript.transcript_text ??
-    JSON.stringify(transcript.derived_notes ?? {}, null, 2);
   const digestDate = digestDateFromPublishedAt(item.published_at);
   const previousDigests = await getPreviousDailyDigests(item.creator_id, digestDate);
   logIngest("daily-digest-generation-started", {
@@ -344,9 +309,7 @@ async function ensureDailyDigest(
   const payload = await generateDailyDigestPayload({
     creatorId: item.creator_id,
     videoId: item.video_id,
-    title: item.title,
-    transcriptOrNotes,
-    transcriptSource: transcript.source,
+    transcript,
     prompt,
     previousDailyContext: formatPreviousDailyContext(digestDate, previousDigests),
   });

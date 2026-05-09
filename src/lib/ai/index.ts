@@ -1,37 +1,40 @@
 import { dailyDigestSchema, weeklyDigestSchema } from "@/lib/digests/schemas";
 import { callChatProvider } from "@/lib/ai/providers";
-import { parseJsonFromModel, localDigestFallback } from "@/lib/ai/json";
+import { parseJsonFromModel } from "@/lib/ai/json";
 import { logModelUsage } from "@/lib/ai/usage";
-import type { AiCallContext, AiProvider, ChatMessage } from "@/lib/ai/types";
+import type { AiProvider, ChatMessage } from "@/lib/ai/types";
+import {
+  assertDailyDigestGrounding,
+  buildDailyDigestMessages,
+  buildTranscriptGroundingMetadata,
+  type DailyDigestTranscriptRecord,
+  validateTranscriptForDailyDigest,
+} from "@/lib/digests/grounding";
 
 export async function generateDailyDigestPayload(input: {
   creatorId: string;
   videoId: string;
-  title: string;
-  transcriptOrNotes: string;
-  transcriptSource: string;
+  transcript: DailyDigestTranscriptRecord;
   prompt: string;
   previousDailyContext?: string;
+  regeneratedAfterHallucinationFix?: boolean;
 }) {
-  const messages: ChatMessage[] = [
-    {
-      role: "system",
-      content:
-        "You are a careful newspaper editor for smart non-technical learners. Return strict JSON only.",
-    },
-    {
-      role: "user",
-      content:
-        `${input.prompt}\n\nVIDEO TITLE:\n${input.title}\n\nSOURCE TYPE:\n${input.transcriptSource}` +
-        `\n\nPREVIOUS DAILY DIGEST CONTEXT:\n${input.previousDailyContext ?? "No prior daily digest is available for this creator."}` +
-        `\n\nSOURCE TEXT:\n${input.transcriptOrNotes}`,
-    },
-  ];
+  const verifiedTranscript = validateTranscriptForDailyDigest({
+    expectedVideoId: input.videoId,
+    transcript: input.transcript,
+  });
+  const messages = buildDailyDigestMessages({
+    prompt: input.prompt,
+    videoId: input.videoId,
+    transcript: verifiedTranscript,
+    previousDailyContext: input.previousDailyContext,
+  });
 
   const route: Array<{ provider: AiProvider; model: string }> = [
     { provider: "deepseek", model: process.env.DEEPSEEK_DAILY_MODEL ?? "deepseek-chat" },
     { provider: "qwen", model: process.env.QWEN_DAILY_FALLBACK_MODEL ?? "qwen-plus" },
   ];
+  const failures: string[] = [];
 
   for (const option of route) {
     try {
@@ -50,19 +53,34 @@ export async function generateDailyDigestPayload(input: {
         },
         result,
       );
-      return dailyDigestSchema.parse(parseJsonFromModel(result.text));
+      const generationTimestamp = new Date().toISOString();
+      const rawPayload = parseJsonFromModel<Record<string, unknown>>(result.text);
+      const parsed = dailyDigestSchema.parse({
+        ...rawPayload,
+        transcript_grounding: undefined,
+      });
+      assertDailyDigestGrounding({
+        transcriptText: verifiedTranscript.transcript_text,
+        digest: parsed,
+      });
+      return dailyDigestSchema.parse({
+        ...parsed,
+        transcript_grounding: buildTranscriptGroundingMetadata({
+          transcript: verifiedTranscript,
+          generationTimestamp,
+          generationModel: `${option.provider}:${option.model}`,
+          sourceNotes: parsed.source_notes,
+          regeneratedAfterHallucinationFix: input.regeneratedAfterHallucinationFix,
+        }),
+      });
     } catch (error) {
-      console.warn(`Daily digest provider failed: ${(error as Error).message}`);
+      const message = (error as Error).message;
+      failures.push(`${option.provider}:${option.model}: ${message}`);
+      console.warn(`Daily digest provider failed: ${message}`);
     }
   }
 
-  return dailyDigestSchema.parse(
-    localDigestFallback({
-      title: input.title,
-      transcriptOrNotes: input.transcriptOrNotes,
-      transcriptSource: input.transcriptSource,
-    }),
-  );
+  throw new Error(`Daily digest generation failed for all providers: ${failures.join(" | ")}`);
 }
 
 export async function generateWeeklyDigestPayload(input: {
@@ -193,35 +211,4 @@ export async function generateWeeklyDigestPayload(input: {
     free_learning_plan: ["Use free docs and official examples before optional paid material."],
     podcast_script: "This week's audio script is unavailable until AI providers are configured.",
   });
-}
-
-export async function generateGeminiVideoNotes(input: {
-  creatorId: string;
-  videoId: string;
-  youtubeUrl: string;
-}) {
-  const model = process.env.GEMINI_VIDEO_MODEL ?? "gemini-2.5-flash";
-  const context: AiCallContext = {
-    provider: "gemini",
-    model,
-    taskType: "video_fallback_notes",
-    creatorId: input.creatorId,
-    videoId: input.videoId,
-  };
-  const result = await callChatProvider({
-    provider: "gemini",
-    model,
-    responseFormat: "json_object",
-    messages: [
-      {
-        role: "user",
-        content:
-          `The public YouTube URL is ${input.youtubeUrl}.\n` +
-          "If you can analyze it, return JSON with keys summary_notes, uncertainty, and key_moments. " +
-          "Do not call this a transcript. If you cannot access the video, say so clearly.",
-      },
-    ],
-  });
-  await logModelUsage(context, result);
-  return parseJsonFromModel<Record<string, unknown>>(result.text);
 }

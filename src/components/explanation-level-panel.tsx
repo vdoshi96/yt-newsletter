@@ -23,7 +23,7 @@ export function ExplanationLevelPanel({
     <section className={className ?? "article-column"}>
       <div className="flex flex-col gap-3">
         <h2 className="text-lg font-black text-slate-950">{title}</h2>
-        <div className="grid grid-cols-3 overflow-hidden rounded-md border border-slate-300 bg-white text-sm font-bold text-slate-700">
+        <div className="grid gap-1 rounded-md border border-slate-300 bg-white p-1 text-xs font-bold text-slate-700 md:grid-cols-3">
           {EXPLANATION_LEVEL_KEYS.map((level) => (
             <button
               key={level}
@@ -31,8 +31,8 @@ export function ExplanationLevelPanel({
               aria-pressed={selected === level}
               className={
                 selected === level
-                  ? "bg-blue-600 px-2 py-2.5 text-white"
-                  : "px-2 py-2.5 hover:bg-slate-50"
+                  ? "rounded bg-blue-600 px-2 py-2.5 text-white"
+                  : "rounded px-2 py-2.5 hover:bg-slate-50"
               }
               onClick={() => setSelected(level)}
             >

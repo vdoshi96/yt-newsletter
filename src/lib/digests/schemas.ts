@@ -33,6 +33,32 @@ const sourceNoteSchema = z.object({
   note: z.string().min(1),
 });
 
+const conceptsToLearnSchema = z.object({
+  beginner: z.array(z.string().min(1)).default([]),
+  intermediate: z.array(z.string().min(1)).default([]),
+  advanced: z.array(z.string().min(1)).default([]),
+});
+
+const transcriptGroundingSchema = z.object({
+  transcript_source: z.string().min(1),
+  transcript_length: z.number().int().nonnegative(),
+  video_id: z.string().min(1),
+  transcript_id: z.string().min(1).optional(),
+  transcript_recorded_at: z.string().min(1).optional(),
+  generation_timestamp: z.string().min(1),
+  generation_model: z.string().min(1).optional(),
+  regenerated_after_hallucination_fix: z.boolean().optional(),
+  key_excerpts: z
+    .array(
+      z.object({
+        timestamp: z.string().optional(),
+        quote: z.string().min(1),
+        note: z.string().min(1),
+      }),
+    )
+    .default([]),
+});
+
 const weeklySourceNoteSchema = z.object({
   date: z.string().min(1),
   label: z.string().min(1),
@@ -89,6 +115,19 @@ export const dailyDigestSchema = z
     topic_links: z.array(linkSchema).default([]),
     skepticism_notes: z.string().min(1),
     source_notes: z.array(sourceNoteSchema).default([]),
+    concepts_to_learn: conceptsToLearnSchema.default({
+      beginner: [],
+      intermediate: [],
+      advanced: [],
+    }),
+    transcript_grounding: transcriptGroundingSchema
+      .default({
+        transcript_source: "legacy_digest_unverified",
+        transcript_length: 0,
+        video_id: "unknown",
+        generation_timestamp: "unknown",
+        key_excerpts: [],
+      }),
     follow_up_from_yesterday: defaultedString("No prior digest available."),
   })
   .transform((digest) => ({
