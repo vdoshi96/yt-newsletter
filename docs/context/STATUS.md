@@ -16,6 +16,7 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 - Weekly digest and podcast pages
 - One-month baseline flow for Nate B. Jones with four weekly digest slots
 - Baseline video filtering that excludes Shorts-style and very short clips from the live starter data
+- Daily and weekly digest explanation levels: beginner, intermediate, and advanced
 - Prompt files and Zod validation
 - Focused tests for parsing, auth, schemas, progress, and date/video selection
 
@@ -23,7 +24,7 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 
 Last known local checks:
 
-- `npm test`: passing, 19 tests
+- `npm test`: passing, 22 tests
 - `npm run lint`: passing
 - `npm run build`: passing
 

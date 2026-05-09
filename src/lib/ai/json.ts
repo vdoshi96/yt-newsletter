@@ -19,6 +19,14 @@ export function localDigestFallback(input: {
     what_creator_said: excerpt ? [excerpt.slice(0, 400)] : [],
     plain_english_explanation:
       "The app could not reach a configured AI provider, so this fallback avoids adding claims beyond the stored transcript or notes.",
+    explanation_levels: {
+      beginner:
+        "This fallback is being careful: it only points back to the saved source text and does not add new claims. Think of it as a placeholder note until the richer AI digest can run.",
+      intermediate:
+        "The configured digest provider was unavailable, so the app preserved the source-backed excerpt and avoided interpretation beyond the transcript or derived notes.",
+      advanced:
+        "Provider routing failed for the daily digest task. The fallback keeps the cached source excerpt, avoids unsupported synthesis, and can be regenerated after credentials or provider responses are healthy.",
+    },
     why_it_matters:
       "This keeps the dashboard useful without inventing details. Regenerate after API credentials are configured for a richer explanation.",
     what_to_do_next: [

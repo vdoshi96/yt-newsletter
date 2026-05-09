@@ -9,6 +9,7 @@ Schema keys:
 - front_page_summary
 - what_creator_said: string[]
 - plain_english_explanation
+- explanation_levels: { beginner, intermediate, advanced }
 - why_it_matters
 - what_to_do_next: string[]
 - free_learning_plan: string[]
@@ -27,4 +28,8 @@ Rules:
 - Prefer free learning paths: official docs, free articles, papers, search terms, free videos, and tiny projects.
 - Do not recommend paid courses unless clearly marked optional.
 - Explain jargon in plain English.
+- `plain_english_explanation` should match the beginner explanation.
+- `explanation_levels.beginner` must be completely layperson-friendly for someone who has never coded, has no CS degree, and may not know basic AI/software terms.
+- `explanation_levels.intermediate` may introduce practical technical ideas, but define any jargon in normal language.
+- `explanation_levels.advanced` may discuss architecture, tradeoffs, evaluation, and implementation details, while still marking uncertainty and staying source-grounded.
 - Keep the digest useful even if the source is partial.

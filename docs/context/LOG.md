@@ -15,3 +15,7 @@ Confirmed the initial 50-video baseline count was wrong because it counted all u
 ## 2026-05-09 Logout Navigation Fix
 
 Confirmed protected tabs appeared to kick users out because the app shell rendered logout as a Next `<Link>` to a destructive GET route. Browser/router prefetch could call `/logout`, delete the session, and make the next tab click redirect to login. Logout now uses an explicit server action form, and GET `/logout` only redirects to login without deleting the session.
+
+## 2026-05-09 Explanation Levels
+
+Added beginner, intermediate, and advanced explanation levels to daily and weekly digest JSON contracts. Daily and weekly pages now show a Level dropdown, and weekly synthesis source text carries all three daily explanation levels forward so weekly digests can summarize at each reader level.

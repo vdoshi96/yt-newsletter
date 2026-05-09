@@ -2,6 +2,8 @@
 
 A private Next.js App Router dashboard that turns YouTube creator uploads into grounded daily newspaper-style digests, weekly newsletters, and optional weekly podcast audio.
 
+Daily and weekly digests include beginner, intermediate, and advanced explanation levels. The beginner level is written for a layperson with no coding experience or computer science background.
+
 ## Stack
 
 - Next.js App Router, TypeScript, Tailwind CSS

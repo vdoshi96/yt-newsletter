@@ -122,6 +122,14 @@ export async function generateWeeklyDigestPayload(input: {
         : "- No daily digest titles were available.") +
       "\n\n## Source-backed recap\n\n" +
       input.sourceText.slice(0, 2600),
+    explanation_levels: {
+      beginner:
+        "This week is summarized from the saved daily digests only. The app is not adding outside claims; it is grouping the creator's covered ideas into a simpler recap.",
+      intermediate:
+        "This fallback weekly view consolidates the cached daily beginner, intermediate, and advanced explanations without adding unsupported facts.",
+      advanced:
+        "The weekly provider route returned unusable output, so this fallback preserves source-grounded daily digest material and defers deeper cross-week synthesis until regeneration succeeds.",
+    },
     ranked_topics: fallbackTitles.slice(0, 5).map((title, index) => ({
       topic: title,
       importance_score: Math.max(0.1, 1 - index * 0.12),

@@ -1,6 +1,8 @@
 import { requireUser } from "@/lib/auth/current-user";
 import { getCreatorsForUser } from "@/lib/creators";
 import { getSql } from "@/lib/db";
+import { weeklyDigestSchema, type WeeklyDigestPayload } from "@/lib/digests/schemas";
+import { ExplanationLevelPanel } from "@/components/explanation-level-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,7 @@ type WeeklyRow = {
   week_end: string;
   newsletter_markdown: string;
   ranked_topics: Array<{ topic: string; importance_score: number; why_it_matters: string }> | null;
+  full_digest_json: unknown;
 };
 
 export default async function WeeklyPage({
@@ -41,28 +44,56 @@ export default async function WeeklyPage({
         </section>
       ) : (
         digests.map((digest) => (
-          <article key={digest.id} className="newspaper-sheet">
-            <p className="section-kicker">
-              {digest.week_start} to {digest.week_end}
-            </p>
-            <h3 className="mt-3 font-serif text-4xl font-black">{digest.title}</h3>
-            <div className="mt-6 grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
-              <aside className="ink-panel">
-                <h4 className="section-kicker">Ranked topics</h4>
-                <ol className="mt-3 space-y-3 text-sm leading-6 text-stone-700">
-                  {(digest.ranked_topics ?? []).map((topic) => (
-                    <li key={topic.topic}>
-                      <strong>{topic.topic}</strong>: {topic.why_it_matters}
-                    </li>
-                  ))}
-                </ol>
-              </aside>
-              <div className="prose-newsletter whitespace-pre-wrap">{digest.newsletter_markdown}</div>
-            </div>
-          </article>
+          <WeeklyDigestArticle key={digest.id} digest={digest} />
         ))
       )}
     </div>
+  );
+}
+
+function WeeklyDigestArticle({ digest }: { digest: WeeklyRow }) {
+  const parsed = parseWeeklyDigestRow(digest);
+  return (
+    <article className="newspaper-sheet">
+      <p className="section-kicker">
+        {digest.week_start} to {digest.week_end}
+      </p>
+      <h3 className="mt-3 font-serif text-4xl font-black">{parsed.title}</h3>
+      <div className="mt-6 grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+        <aside className="ink-panel">
+          <h4 className="section-kicker">Ranked topics</h4>
+          <ol className="mt-3 space-y-3 text-sm leading-6 text-stone-700">
+            {parsed.ranked_topics.map((topic) => (
+              <li key={topic.topic}>
+                <strong>{topic.topic}</strong>: {topic.why_it_matters}
+              </li>
+            ))}
+          </ol>
+        </aside>
+        <div className="space-y-6">
+          <ExplanationLevelPanel
+            title="Weekly explanation"
+            levels={parsed.explanation_levels}
+            className="article-column"
+          />
+          <div className="prose-newsletter whitespace-pre-wrap">{parsed.newsletter_markdown}</div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function parseWeeklyDigestRow(digest: WeeklyRow): WeeklyDigestPayload {
+  return weeklyDigestSchema.parse(
+    digest.full_digest_json ?? {
+      title: digest.title,
+      newsletter_markdown: digest.newsletter_markdown,
+      ranked_topics: digest.ranked_topics ?? [],
+      what_changed: "No change summary is available.",
+      what_to_do_next: [],
+      free_learning_plan: [],
+      podcast_script: "No podcast script is available.",
+    },
   );
 }
 
@@ -75,7 +106,8 @@ async function getWeeklyDigests(userId: string, creatorId: string) {
       weekly_digests.week_start::text as week_start,
       weekly_digests.week_end::text as week_end,
       weekly_digests.newsletter_markdown,
-      weekly_digests.ranked_topics
+      weekly_digests.ranked_topics,
+      weekly_digests.full_digest_json
     from weekly_digests
     join user_creators on user_creators.creator_id = weekly_digests.creator_id
     where user_creators.user_id = ${userId}

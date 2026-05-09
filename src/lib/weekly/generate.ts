@@ -3,6 +3,7 @@ import { booleanEnv } from "@/lib/config";
 import { getSql } from "@/lib/db";
 import { loadPrompt } from "@/lib/prompts";
 import { uploadGeneratedAsset } from "@/lib/supabase/storage";
+import { buildWeeklySourceText, type WeeklySourceDigest } from "@/lib/weekly/source-text";
 
 export async function ensureWeeklyDigestForVideoWeek(input: {
   creatorId: string;
@@ -20,16 +21,14 @@ export async function ensureWeeklyDigestForVideoWeek(input: {
   `;
   if (existing[0]) return existing[0].id;
 
-  const daily = await sql<
-    Array<{
-      title: string;
-      front_page_summary: string;
-      plain_english_explanation: string;
-      why_it_matters: string;
-      digest_date: string;
-    }>
-  >`
-    select title, front_page_summary, plain_english_explanation, why_it_matters, digest_date::text
+  const daily = await sql<WeeklySourceDigest[]>`
+    select
+      title,
+      front_page_summary,
+      plain_english_explanation,
+      full_digest_json,
+      why_it_matters,
+      digest_date::text
     from daily_digests
     where creator_id = ${input.creatorId}
       and digest_date between ${weekStart} and ${weekEnd}
@@ -38,12 +37,7 @@ export async function ensureWeeklyDigestForVideoWeek(input: {
   if (!daily.length) return null;
 
   const prompt = await loadPrompt("weekly_digest");
-  const sourceText = daily
-    .map(
-      (digest) =>
-        `Date: ${digest.digest_date}\nTitle: ${digest.title}\nSummary: ${digest.front_page_summary}\nExplanation: ${digest.plain_english_explanation}\nWhy it matters: ${digest.why_it_matters}`,
-    )
-    .join("\n\n---\n\n");
+  const sourceText = buildWeeklySourceText(daily);
   const payload = await generateWeeklyDigestPayload({
     creatorId: input.creatorId,
     weekStart,

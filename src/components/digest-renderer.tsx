@@ -1,4 +1,5 @@
 import type { DailyDigestPayload } from "@/lib/digests/schemas";
+import { ExplanationLevelPanel } from "@/components/explanation-level-panel";
 
 export function DigestRenderer({ digest }: { digest: DailyDigestPayload }) {
   return (
@@ -30,10 +31,10 @@ export function DigestRenderer({ digest }: { digest: DailyDigestPayload }) {
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1fr_0.85fr]">
-        <section className="article-column">
-          <h2>Plain-English explanation</h2>
-          <p>{digest.plain_english_explanation}</p>
-        </section>
+        <ExplanationLevelPanel
+          title="Plain-English explanation"
+          levels={digest.explanation_levels}
+        />
         <section className="article-column">
           <h2>Why this matters</h2>
           <p>{digest.why_it_matters}</p>

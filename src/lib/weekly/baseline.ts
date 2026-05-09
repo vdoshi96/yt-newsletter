@@ -2,14 +2,7 @@ import { generateWeeklyDigestPayload } from "@/lib/ai";
 import { getPastMonthBaselineWindow, type BaselineWeekWindow } from "@/lib/baseline/month";
 import { getSql } from "@/lib/db";
 import { loadPrompt } from "@/lib/prompts";
-
-type WeeklySourceDigest = {
-  title: string;
-  front_page_summary: string;
-  plain_english_explanation: string;
-  why_it_matters: string;
-  digest_date: string;
-};
+import { buildWeeklySourceText, type WeeklySourceDigest } from "@/lib/weekly/source-text";
 
 export async function ensurePastMonthWeeklyDigests(input: {
   creatorId: string;
@@ -54,6 +47,7 @@ async function ensureBaselineWeekDigest(
       title,
       front_page_summary,
       plain_english_explanation,
+      full_digest_json,
       why_it_matters,
       digest_date::text as digest_date
     from daily_digests
@@ -135,12 +129,7 @@ async function generateWeeklyFromDailyDigests(
   sourceDigests: WeeklySourceDigest[],
 ) {
   const prompt = await loadPrompt("weekly_digest");
-  const sourceText = sourceDigests
-    .map(
-      (digest) =>
-        `Date: ${digest.digest_date}\nTitle: ${digest.title}\nSummary: ${digest.front_page_summary}\nExplanation: ${digest.plain_english_explanation}\nWhy it matters: ${digest.why_it_matters}`,
-    )
-    .join("\n\n---\n\n");
+  const sourceText = buildWeeklySourceText(sourceDigests);
 
   return generateWeeklyDigestPayload({
     creatorId,
@@ -158,6 +147,14 @@ function createEmptyWeekPayload(window: BaselineWeekWindow) {
     newsletter_markdown:
       `# Baseline week: ${window.weekStart} to ${window.weekEnd}\n\n` +
       "No ingested videos were available for this seven-day slice yet. Once videos from this period are processed, this placeholder can be replaced with a source-backed weekly digest.",
+    explanation_levels: {
+      beginner:
+        "There are no processed daily digests in this week yet, so there is nothing source-backed to explain.",
+      intermediate:
+        "This weekly slot is waiting for processed daily digests before it can summarize patterns at an intermediate level.",
+      advanced:
+        "No source-backed daily explanation levels are available for this week, so advanced synthesis is intentionally withheld.",
+    },
     ranked_topics: [],
     what_changed:
       "No source-backed change summary is available because no daily digests exist for this week yet.",

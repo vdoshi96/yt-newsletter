@@ -9,6 +9,11 @@ describe("digest schemas", () => {
       dek: "What changed, why it matters, and where to learn for free.",
       front_page_summary: "The creator explained agent workflows with caveats.",
       plain_english_explanation: "Agents are software loops that use tools and checks.",
+      explanation_levels: {
+        beginner: "Imagine a helper that follows a checklist and asks tools for help.",
+        intermediate: "An agent is a loop that plans, calls tools, checks results, and repeats.",
+        advanced: "An agentic workflow combines model calls, tool adapters, state, evals, and guardrails.",
+      },
       why_it_matters: "This helps non-programmers understand what is automated.",
       what_creator_said: ["Agents need guardrails."],
       what_to_do_next: ["Try reading a free docs page."],
@@ -21,6 +26,7 @@ describe("digest schemas", () => {
     });
 
     expect(parsed.layout_type).toBe("concept_explainer");
+    expect(parsed.explanation_levels.beginner).toContain("helper");
   });
 
   it("rejects arbitrary layouts", () => {
@@ -69,6 +75,11 @@ describe("digest schemas", () => {
     const parsed = weeklyDigestSchema.parse({
       title: "This week in practical AI",
       newsletter_markdown: "# This week\n\nA grounded recap.",
+      explanation_levels: {
+        beginner: "This week, the big idea is what AI tools can and cannot reliably do.",
+        intermediate: "The week centered on agent workflows, evaluation, and practical limits.",
+        advanced: "The week connected orchestration patterns, eval pressure, and deployment tradeoffs.",
+      },
       ranked_topics: [{ topic: "Agents", importance_score: 0.9, why_it_matters: "Useful pattern." }],
       what_changed: "More emphasis on evaluation.",
       what_to_do_next: ["Run a small free experiment."],
@@ -77,6 +88,7 @@ describe("digest schemas", () => {
     });
 
     expect(parsed.podcast_script).toContain("This week");
+    expect(parsed.explanation_levels.intermediate).toContain("agent");
   });
 
   it("normalizes weekly provider scores from a 0-100 scale", () => {

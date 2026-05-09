@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  EXPLANATION_LEVEL_KEYS,
+  normalizeExplanationLevels,
+} from "./explanation-levels";
 
 export const layoutTypeSchema = z.enum([
   "single_big_story",
@@ -25,6 +29,13 @@ const sourceNoteSchema = z.object({
   note: z.string().min(1),
 });
 
+const explanationLevelsSchema = z.object(
+  Object.fromEntries(EXPLANATION_LEVEL_KEYS.map((level) => [level, z.string().min(1)])) as Record<
+    (typeof EXPLANATION_LEVEL_KEYS)[number],
+    z.ZodString
+  >,
+);
+
 const defaultedString = (fallback: string) =>
   z.preprocess((value) => (value === null || value === undefined ? fallback : value), z.string());
 
@@ -34,41 +45,59 @@ const importanceScoreSchema = z.preprocess((value) => {
   return value;
 }, z.number().min(0).max(1));
 
-export const dailyDigestSchema = z.object({
-  layout_type: layoutTypeSchema,
-  title: z.string().min(1),
-  dek: z.string().min(1),
-  front_page_summary: z.string().min(1),
-  what_creator_said: z.array(z.string()).default([]),
-  plain_english_explanation: z.string().min(1),
-  why_it_matters: z.string().min(1),
-  what_to_do_next: z.array(z.string()).default([]),
-  free_learning_plan: z.array(z.string()).default([]),
-  glossary: z.array(glossarySchema).default([]),
-  topic_links: z.array(linkSchema).default([]),
-  skepticism_notes: z.string().min(1),
-  source_notes: z.array(sourceNoteSchema).default([]),
-  follow_up_from_yesterday: defaultedString("No prior digest available."),
-});
+export const dailyDigestSchema = z
+  .object({
+    layout_type: layoutTypeSchema,
+    title: z.string().min(1),
+    dek: z.string().min(1),
+    front_page_summary: z.string().min(1),
+    what_creator_said: z.array(z.string()).default([]),
+    plain_english_explanation: z.string().min(1),
+    explanation_levels: explanationLevelsSchema.optional(),
+    why_it_matters: z.string().min(1),
+    what_to_do_next: z.array(z.string()).default([]),
+    free_learning_plan: z.array(z.string()).default([]),
+    glossary: z.array(glossarySchema).default([]),
+    topic_links: z.array(linkSchema).default([]),
+    skepticism_notes: z.string().min(1),
+    source_notes: z.array(sourceNoteSchema).default([]),
+    follow_up_from_yesterday: defaultedString("No prior digest available."),
+  })
+  .transform((digest) => ({
+    ...digest,
+    explanation_levels: normalizeExplanationLevels(
+      digest.explanation_levels,
+      digest.plain_english_explanation,
+    ),
+  }));
 
 export type DailyDigestPayload = z.infer<typeof dailyDigestSchema>;
 
-export const weeklyDigestSchema = z.object({
-  title: z.string().min(1),
-  newsletter_markdown: z.string().min(1),
-  ranked_topics: z
-    .array(
-      z.object({
-        topic: z.string().min(1),
-        importance_score: importanceScoreSchema,
-        why_it_matters: z.string().min(1),
-      }),
-    )
-    .default([]),
-  what_changed: z.string().min(1),
-  what_to_do_next: z.array(z.string()).default([]),
-  free_learning_plan: z.array(z.string()).default([]),
-  podcast_script: z.string().min(1),
-});
+export const weeklyDigestSchema = z
+  .object({
+    title: z.string().min(1),
+    newsletter_markdown: z.string().min(1),
+    explanation_levels: explanationLevelsSchema.optional(),
+    ranked_topics: z
+      .array(
+        z.object({
+          topic: z.string().min(1),
+          importance_score: importanceScoreSchema,
+          why_it_matters: z.string().min(1),
+        }),
+      )
+      .default([]),
+    what_changed: z.string().min(1),
+    what_to_do_next: z.array(z.string()).default([]),
+    free_learning_plan: z.array(z.string()).default([]),
+    podcast_script: z.string().min(1),
+  })
+  .transform((digest) => ({
+    ...digest,
+    explanation_levels: normalizeExplanationLevels(
+      digest.explanation_levels,
+      digest.newsletter_markdown,
+    ),
+  }));
 
 export type WeeklyDigestPayload = z.infer<typeof weeklyDigestSchema>;
