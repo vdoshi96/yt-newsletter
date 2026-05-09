@@ -92,5 +92,6 @@ async function getPodcasts(userId: string, creatorId: string) {
     where user_creators.user_id = ${userId}
       and weekly_digests.creator_id = ${creatorId}
     order by weekly_digests.week_start desc
+    limit 4
   `;
 }

@@ -41,8 +41,9 @@ export default async function CreatorsPage({
             <select
               className="mt-2 h-12 w-full rounded border border-stone-300 bg-white px-3 text-stone-950"
               name="requestedCount"
-              defaultValue="5"
+              defaultValue="past_month"
             >
+              <option value="past_month">Past month</option>
               {[5, 10, 25, 50].map((count) => (
                 <option key={count} value={count}>
                   {count} videos
@@ -52,7 +53,7 @@ export default async function CreatorsPage({
           </label>
           <div className="flex items-end">
             <SubmitButton className="btn-primary h-12 w-full justify-center">
-              Start ingestion
+              Start baseline
             </SubmitButton>
           </div>
         </form>
@@ -63,7 +64,8 @@ export default async function CreatorsPage({
         <div className="mt-4 divide-y divide-stone-200">
           {creators.length === 0 ? (
             <p className="py-4 text-sm text-stone-600">
-              No creators yet. Nate B. Jones is added by `npm run seed:creator`.
+              No creators yet. Nate B. Jones is added by `npm run seed:creator`, and
+              the one-month baseline is queued with `npm run seed:baseline`.
             </p>
           ) : (
             creators.map((creator) => (

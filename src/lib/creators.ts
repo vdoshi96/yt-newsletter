@@ -3,6 +3,8 @@ import { estimateIngestSeconds } from "@/lib/jobs/progress";
 import type { DiscoveredCreator, DiscoveredVideo } from "@/lib/youtube/client";
 import { discoverCreatorVideos } from "@/lib/youtube/client";
 import type { Creator, IngestJob } from "@/lib/types";
+import { getPastMonthBaselineWindow } from "@/lib/baseline/month";
+import { numberEnv } from "@/lib/config";
 
 export async function getCreatorsForUser(userId: string) {
   const sql = getSql();
@@ -53,6 +55,36 @@ export async function startIngestForCreatorUrl(input: {
     creatorId,
     jobId,
     warning: discovery.warning,
+  };
+}
+
+export async function startPastMonthBaselineForCreatorUrl(input: {
+  userId: string;
+  creatorUrl: string;
+  now?: Date;
+}) {
+  const baseline = getPastMonthBaselineWindow(input.now);
+  const lookbackLimit = numberEnv("BASELINE_MONTH_VIDEO_LOOKBACK_LIMIT", 50);
+  const discovery = await discoverCreatorVideos(input.creatorUrl, lookbackLimit);
+  const videosInBaseline = discovery.videos.filter((video) =>
+    baseline.includesPublishedAt(video.published_at),
+  );
+  const creatorId = await upsertCreator(discovery.creator);
+  await linkUserCreator(input.userId, creatorId);
+  const videoIds = await upsertVideos(creatorId, videosInBaseline);
+  const jobId = await createIngestJob({
+    userId: input.userId,
+    creatorId,
+    requestedCount: videoIds.length,
+    videoIds,
+  });
+
+  return {
+    creatorId,
+    jobId,
+    baseline,
+    videoCount: videoIds.length,
+    discoveryWarning: discovery.warning,
   };
 }
 

@@ -28,16 +28,16 @@ export default async function WeeklyPage({
     <div className="space-y-6">
       <section className="newspaper-sheet">
         <p className="section-kicker">Sunday edition</p>
-        <h2 className="mt-3 font-serif text-5xl font-black">Weekly digests</h2>
+        <h2 className="mt-3 font-serif text-5xl font-black">Four weekly digests</h2>
         <p className="mt-4 max-w-3xl text-stone-700">
-          Weekly newsletters synthesize the ingested videos from each creator&apos;s week,
-          rank the important topics, and focus the learning plan on free resources.
+          The baseline view keeps the latest four seven-day digest slots for the past
+          month, ranking important topics and focusing the learning plan on free resources.
         </p>
       </section>
 
       {digests.length === 0 ? (
         <section className="ink-panel">
-          <p className="text-stone-600">No weekly digests yet. They are generated after daily digests exist.</p>
+          <p className="text-stone-600">No weekly digests yet. Run the one-month baseline seed and processor.</p>
         </section>
       ) : (
         digests.map((digest) => (
@@ -81,5 +81,6 @@ async function getWeeklyDigests(userId: string, creatorId: string) {
     where user_creators.user_id = ${userId}
       and weekly_digests.creator_id = ${creatorId}
     order by weekly_digests.week_start desc
+    limit 4
   `;
 }

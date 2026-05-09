@@ -12,6 +12,7 @@
     "db:migrate": "tsx scripts/apply-migration.ts",
     "seed:user": "tsx scripts/seed-user.ts",
     "seed:creator": "tsx scripts/seed-creator.ts",
+    "seed:baseline": "tsx scripts/seed-baseline-month.ts",
     "seed": "npm run seed:user && npm run seed:creator",
     "ingest:process": "tsx scripts/process-ingest.ts"
   },

@@ -32,8 +32,8 @@ export default async function AppHome() {
               A calmer way to keep up with fast YouTube creators.
             </h2>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-stone-700">
-              Paste a creator URL, backfill a few recent videos, and read a grounded
-              digest that separates transcript-backed claims from uncertainty.
+              Paste a creator URL, backfill the past month of videos, and read four
+              weekly editions that separate transcript-backed claims from uncertainty.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link className="btn-primary" href="/app/creators">
@@ -57,8 +57,8 @@ export default async function AppHome() {
           <h3 className="section-kicker">Starter creator</h3>
           <p className="mt-2 font-serif text-3xl font-black">Nate B. Jones</p>
           <p className="mt-3 text-sm leading-6 text-stone-700">
-            Seeded as the first creator. Ingestion is manual, with a default backfill of
-            five videos.
+            Seeded as the first creator. The baseline run queues the past 28 days of
+            videos and maintains four weekly digest slots.
           </p>
           <Link className="mt-5 inline-flex btn-secondary" href="/app/creators">
             Start a backfill

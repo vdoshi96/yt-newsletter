@@ -18,6 +18,7 @@ npm install
 npm run env:setup
 npm run db:migrate
 npm run seed
+npm run seed:baseline -- --process
 npm run dev
 ```
 
@@ -69,6 +70,7 @@ NEXT_PUBLIC_APP_URL
 SUPABASE_STORAGE_BUCKET
 MONTHLY_AI_BUDGET_USD
 MAX_BACKFILL_VIDEOS_PER_JOB
+BASELINE_MONTH_VIDEO_LOOKBACK_LIMIT
 MAX_VIDEOS_PROCESSED_PER_CRON_RUN
 TRANSCRIPT_RETRY_HOURS
 GENERATE_IMAGES
@@ -91,7 +93,19 @@ Seed the starter creator, Nate B. Jones:
 npm run seed:creator
 ```
 
-This does not ingest 50 videos. The dashboard defaults to 5 videos unless the user selects more.
+Queue the live one-month baseline for Nate B. Jones:
+
+```bash
+npm run seed:baseline
+```
+
+Queue and process the baseline in one run:
+
+```bash
+npm run seed:baseline -- --process
+```
+
+The baseline covers the past 28 days of videos and creates exactly four seven-day weekly digest slots. The app also exposes this from `/app/settings` with “Seed past month baseline.”
 
 ## Manual Ingestion
 
@@ -100,7 +114,7 @@ From the UI:
 1. Sign in.
 2. Go to `/app/creators`.
 3. Paste a YouTube creator/channel/video URL.
-4. Choose 5, 10, 25, or 50 videos.
+4. Choose “Past month” for the baseline, or 5, 10, 25, or 50 videos.
 5. Start ingestion.
 6. Go to `/app/settings` and click “Run ingest now,” or call the cron endpoint.
 
@@ -146,6 +160,7 @@ vercel env add FIRST_ADMIN_USERNAME production
 vercel env add FIRST_ADMIN_PASSWORD production
 vercel env add CRON_SECRET production
 vercel env add COOKIE_SECRET production
+vercel env add BASELINE_MONTH_VIDEO_LOOKBACK_LIMIT production
 vercel --prod
 ```
 

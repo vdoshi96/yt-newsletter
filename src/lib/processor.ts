@@ -3,7 +3,7 @@ import { booleanEnv, numberEnv } from "@/lib/config";
 import { getSql } from "@/lib/db";
 import { loadPrompt } from "@/lib/prompts";
 import { fetchFreeTranscript } from "@/lib/youtube/transcripts";
-import { ensureWeeklyDigestForVideoWeek } from "@/lib/weekly/generate";
+import { ensurePastMonthWeeklyDigests } from "@/lib/weekly/baseline";
 
 type QueueItem = {
   item_id: string;
@@ -47,12 +47,35 @@ export async function processIngestQueue(limit = numberEnv("MAX_VIDEOS_PROCESSED
   `;
 
   let processed = 0;
+  const touchedCreators = new Set<string>();
   for (const item of items) {
     await processQueueItem(item);
+    touchedCreators.add(item.creator_id);
     processed += 1;
   }
 
+  for (const creatorId of touchedCreators) {
+    const openItems = await countOpenItemsForCreator(creatorId);
+    await ensurePastMonthWeeklyDigests({
+      creatorId,
+      generateFromSources: openItems === 0,
+      forceRegenerate: openItems === 0,
+    });
+  }
+
   return { processed, limit };
+}
+
+async function countOpenItemsForCreator(creatorId: string) {
+  const sql = getSql();
+  const rows = await sql<{ count: number }[]>`
+    select count(*)::int as count
+    from ingest_job_items
+    join ingest_jobs on ingest_jobs.id = ingest_job_items.job_id
+    where ingest_jobs.creator_id = ${creatorId}
+      and ingest_job_items.status in ('queued', 'processing', 'waiting_for_transcript', 'generating_digest', 'generating_assets')
+  `;
+  return rows[0]?.count ?? 0;
 }
 
 async function processQueueItem(item: QueueItem) {
@@ -97,10 +120,6 @@ async function processQueueItem(item: QueueItem) {
       set status = 'completed', completed_at = now(), updated_at = now()
       where id = ${item.item_id}
     `;
-    await ensureWeeklyDigestForVideoWeek({
-      creatorId: item.creator_id,
-      publishedAt: item.published_at,
-    });
   } catch (error) {
     await sql`
       update ingest_job_items

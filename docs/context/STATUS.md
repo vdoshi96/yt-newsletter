@@ -14,6 +14,7 @@ Phase 1/2 MVP scaffold is implemented locally.
 - Queue processor endpoints and manual runner
 - Daily digest UI
 - Weekly digest and podcast pages
+- One-month baseline flow for Nate B. Jones with four weekly digest slots
 - Prompt files and Zod validation
 - Focused tests for parsing, auth, schemas, progress, and date/video selection
 
@@ -21,11 +22,11 @@ Phase 1/2 MVP scaffold is implemented locally.
 
 Last known local checks:
 
-- `npm test`: passing
-- `npm run lint`: passing after removing one warning
+- `npm test`: passing, 14 tests
+- `npm run lint`: passing
 - `npm run build`: passing
 
 ## Known Issues
 
 - Local `.env.local` is missing `SUPABASE_SERVICE_ROLE_KEY`.
-- Current `DATABASE_URL`, `DATABASE_CONNECTION_STRING`, and `DIRECT_URL` did not authenticate, so migration/seed could not be applied from this machine.
+- Current `DATABASE_URL`, `DATABASE_CONNECTION_STRING`, and `DIRECT_URL` previously did not authenticate, so migration/seed/live baseline population may be blocked until those credentials are corrected.
