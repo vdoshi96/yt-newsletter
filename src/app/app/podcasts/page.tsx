@@ -1,4 +1,4 @@
-import { Headphones } from "lucide-react";
+import { CalendarDays, Headphones, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/current-user";
 import { getCreatorsForUser } from "@/lib/creators";
@@ -39,8 +39,10 @@ export default async function PodcastsPage({
     <div className="space-y-6">
       <section className="newspaper-sheet">
         <p className="section-kicker">Audio desk</p>
-        <h2 className="mt-3 font-serif text-5xl font-black">Weekly podcast summaries</h2>
-        <p className="mt-4 max-w-3xl text-stone-700">
+        <h2 className="mt-3 text-5xl font-black tracking-tight text-slate-950">
+          Weekly podcast summaries
+        </h2>
+        <p className="mt-4 max-w-3xl text-slate-600">
           Podcast scripts are generated with weekly digests and stored as an archive.
           Audio appears when generated with Qwen TTS and Supabase Storage.
         </p>
@@ -50,10 +52,10 @@ export default async function PodcastsPage({
         <section className="ink-panel">
           <form method="get" className="grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
             <input type="hidden" name="creatorId" value={creatorId} />
-            <label className="block text-sm font-bold text-stone-800">
+            <label className="form-label">
               Week
               <input
-                className="mt-2 h-11 w-full rounded border border-stone-300 bg-white px-3 text-stone-950"
+                className="field-control mt-2"
                 name="week"
                 type="date"
                 defaultValue={selectedWeekStart}
@@ -65,11 +67,15 @@ export default async function PodcastsPage({
                 ))}
               </datalist>
             </label>
-            <button className="btn-secondary h-11 justify-center">Load week</button>
+            <button className="btn-primary h-11 justify-center">
+              <CalendarDays aria-hidden className="size-4" />
+              Load week
+            </button>
             <Link
               className="btn-secondary h-11 justify-center"
               href={`/app/podcasts?creatorId=${creatorId}&week=${currentWeekStart}`}
             >
+              <RotateCcw aria-hidden className="size-4" />
               Jump to current
             </Link>
           </form>
@@ -80,7 +86,7 @@ export default async function PodcastsPage({
         <EmptyPodcast title="No creators yet" />
       ) : podcasts.length === 0 ? (
         <section className="ink-panel">
-          <p className="text-stone-600">No podcast scripts or audio yet.</p>
+          <p className="text-slate-600">No podcast scripts or audio yet.</p>
         </section>
       ) : selectedPodcast ? (
         <PodcastArticle podcast={selectedPodcast} />
@@ -95,26 +101,28 @@ function PodcastArticle({ podcast }: { podcast: PodcastRow }) {
   return (
     <article className="ink-panel">
       <div className="flex items-start gap-4">
-        <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-stone-900 text-white">
+        <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
           <Headphones className="size-5" aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
           <p className="section-kicker">
             {podcast.week_start} to {podcast.week_end}
           </p>
-          <h3 className="mt-2 font-serif text-3xl font-black">{podcast.title}</h3>
+          <h3 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+            {podcast.title}
+          </h3>
           {podcast.public_url ? (
             <audio className="mt-4 w-full" controls src={podcast.public_url} />
           ) : (
-            <p className="mt-3 text-sm text-stone-600">
+            <p className="mt-3 text-sm text-slate-600">
               Audio has not been generated for this week.
             </p>
           )}
           <details className="mt-4">
-            <summary className="cursor-pointer text-sm font-bold text-stone-800">
+            <summary className="cursor-pointer text-sm font-bold text-slate-800">
               Show podcast script
             </summary>
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-stone-700">
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">
               {podcast.podcast_script}
             </p>
           </details>
@@ -128,8 +136,8 @@ function EmptyPodcast({ title }: { title: string }) {
   return (
     <section className="newspaper-sheet text-center">
       <p className="section-kicker">Empty podcast</p>
-      <h2 className="mt-3 font-serif text-4xl font-black">{title}</h2>
-      <p className="mx-auto mt-3 max-w-xl text-stone-600">
+      <h2 className="mt-3 text-4xl font-black tracking-tight text-slate-950">{title}</h2>
+      <p className="mx-auto mt-3 max-w-xl text-slate-600">
         Weekly podcast scripts appear with weekly digests. Audio appears after podcast generation.
       </p>
     </section>

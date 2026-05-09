@@ -4,24 +4,24 @@ import { ExplanationLevelPanel } from "@/components/explanation-level-panel";
 export function DigestRenderer({ digest }: { digest: DailyDigestPayload }) {
   return (
     <article className="newspaper-sheet">
-      <header className="border-b-4 border-double border-stone-900 pb-5">
-        <p className="text-xs font-bold uppercase tracking-[0.22em] text-stone-500">
+      <header className="border-b border-slate-200 pb-5">
+        <p className="section-kicker">
           Daily creator edition
         </p>
-        <h1 className="mt-3 max-w-4xl font-serif text-4xl font-black leading-tight text-stone-950 md:text-6xl">
+        <h1 className="mt-3 max-w-4xl text-4xl font-black leading-tight tracking-tight text-slate-950 md:text-5xl">
           {digest.title}
         </h1>
-        <p className="mt-3 max-w-3xl text-lg text-stone-700">{digest.dek}</p>
+        <p className="mt-3 max-w-3xl text-lg leading-8 text-slate-600">{digest.dek}</p>
       </header>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <section>
-          <h2 className="section-kicker">Front Page</h2>
+          <h2 className="section-kicker">Front page summary</h2>
           <p className="newspaper-lede">{digest.front_page_summary}</p>
         </section>
-        <aside className="ink-panel">
-          <h2 className="section-kicker">Skepticism / Uncertainty</h2>
-          <p className="text-sm leading-6 text-stone-700">{digest.skepticism_notes}</p>
+        <aside className="rounded-lg border border-amber-300 bg-amber-50/60 p-5">
+          <h2 className="text-base font-black text-amber-800">Skepticism / uncertainty</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-700">{digest.skepticism_notes}</p>
         </aside>
       </div>
 
@@ -50,12 +50,12 @@ export function DigestRenderer({ digest }: { digest: DailyDigestPayload }) {
           <h2 className="section-kicker">Terms to understand</h2>
           <dl className="space-y-3">
             {digest.glossary.length === 0 ? (
-              <p className="text-sm text-stone-600">No glossary terms were extracted yet.</p>
+              <p className="text-sm text-slate-600">No glossary terms were extracted yet.</p>
             ) : (
               digest.glossary.map((term) => (
                 <div key={term.term}>
-                  <dt className="font-bold text-stone-950">{term.term}</dt>
-                  <dd className="text-sm leading-6 text-stone-700">{term.definition}</dd>
+                  <dt className="font-bold text-slate-950">{term.term}</dt>
+                  <dd className="text-sm leading-6 text-slate-600">{term.definition}</dd>
                 </div>
               ))
             )}
@@ -71,7 +71,7 @@ function DigestSection({ title, items }: { title: string; items: string[] }) {
   return (
     <section className="ink-panel">
       <h2 className="section-kicker">{title}</h2>
-      <ul className="space-y-3 text-sm leading-6 text-stone-700">
+      <ul className="mt-3 space-y-3 text-sm leading-6 text-slate-600">
         {items.length === 0 ? (
           <li>No items available yet.</li>
         ) : (

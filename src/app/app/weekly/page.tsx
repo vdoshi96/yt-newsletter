@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CalendarDays, RotateCcw } from "lucide-react";
 import { requireUser } from "@/lib/auth/current-user";
 import { getCreatorsForUser } from "@/lib/creators";
 import { getSql } from "@/lib/db";
@@ -41,8 +42,10 @@ export default async function WeeklyPage({
     <div className="space-y-6">
       <section className="newspaper-sheet">
         <p className="section-kicker">This Week in AI</p>
-        <h2 className="mt-3 font-serif text-5xl font-black">Weekly digest archive</h2>
-        <p className="mt-4 max-w-3xl text-stone-700">
+        <h2 className="mt-3 text-5xl font-black tracking-tight text-slate-950">
+          Weekly digest archive
+        </h2>
+        <p className="mt-4 max-w-3xl text-slate-600">
           The starter archive begins with four backfilled weeks. New completed
           Sunday-to-Saturday editions are stored here as they are generated.
         </p>
@@ -52,10 +55,10 @@ export default async function WeeklyPage({
         <section className="ink-panel">
           <form method="get" className="grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
             <input type="hidden" name="creatorId" value={creatorId} />
-            <label className="block text-sm font-bold text-stone-800">
+            <label className="form-label">
               Week
               <input
-                className="mt-2 h-11 w-full rounded border border-stone-300 bg-white px-3 text-stone-950"
+                className="field-control mt-2"
                 name="week"
                 type="date"
                 defaultValue={selectedWeekStart}
@@ -67,11 +70,15 @@ export default async function WeeklyPage({
                 ))}
               </datalist>
             </label>
-            <button className="btn-secondary h-11 justify-center">Load week</button>
+            <button className="btn-primary h-11 justify-center">
+              <CalendarDays aria-hidden className="size-4" />
+              Load week
+            </button>
             <Link
               className="btn-secondary h-11 justify-center"
               href={`/app/weekly?creatorId=${creatorId}&week=${currentWeekStart}`}
             >
+              <RotateCcw aria-hidden className="size-4" />
               Jump to current
             </Link>
           </form>
@@ -82,7 +89,9 @@ export default async function WeeklyPage({
         <EmptyWeek title="No creators yet" />
       ) : digests.length === 0 ? (
         <section className="ink-panel">
-          <p className="text-stone-600">No weekly digests yet. Run the one-month baseline seed and processor.</p>
+          <p className="text-slate-600">
+            No weekly digests yet. Run the one-month baseline seed and processor.
+          </p>
         </section>
       ) : selectedDigest ? (
         <WeeklyDigestArticle digest={selectedDigest} creatorId={creatorId} />
@@ -100,11 +109,11 @@ function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creator
       <p className="section-kicker">
         {digest.week_start} to {digest.week_end}
       </p>
-      <h3 className="mt-3 font-serif text-4xl font-black">{parsed.title}</h3>
+      <h3 className="mt-3 text-4xl font-black tracking-tight text-slate-950">{parsed.title}</h3>
       <div className="mt-6 grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
         <aside className="ink-panel">
           <h4 className="section-kicker">Ranked topics</h4>
-          <ol className="mt-3 space-y-3 text-sm leading-6 text-stone-700">
+          <ol className="mt-3 space-y-3 text-sm leading-6 text-slate-600">
             {parsed.ranked_topics.map((topic) => (
               <li key={topic.topic}>
                 <strong>{topic.topic}</strong>: {topic.why_it_matters}
@@ -128,7 +137,7 @@ function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creator
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <section className="ink-panel">
           <h4 className="section-kicker">Board-level implications</h4>
-          <ul className="mt-3 space-y-3 text-sm leading-6 text-stone-700">
+          <ul className="mt-3 space-y-3 text-sm leading-6 text-slate-600">
             {parsed.board_level_implications.length ? (
               parsed.board_level_implications.map((item) => <li key={item}>{item}</li>)
             ) : (
@@ -138,7 +147,7 @@ function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creator
         </section>
         <section className="ink-panel">
           <h4 className="section-kicker">Markets and investments</h4>
-          <p className="mt-3 text-sm leading-6 text-stone-700">
+          <p className="mt-3 text-sm leading-6 text-slate-600">
             {parsed.market_investment_lens}
           </p>
         </section>
@@ -152,20 +161,20 @@ function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creator
               <Link
                 key={`${post.date}-${post.title}`}
                 href={`/app/daily?creatorId=${creatorId}&date=${post.date}`}
-                className="block border-t border-stone-300 pt-3 text-stone-900 transition hover:border-stone-900 hover:bg-white/55"
+                className="block rounded-md border border-slate-200 bg-white p-4 text-slate-900 transition hover:border-blue-300 hover:bg-blue-50/30"
               >
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-stone-500">
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
                   {post.date} / {post.type}
                 </p>
-                <h5 className="mt-2 font-serif text-xl font-black">{post.title}</h5>
-                <p className="mt-2 text-sm leading-6 text-stone-700">{post.summary}</p>
-                <p className="mt-2 text-sm leading-6 text-stone-700">
+                <h5 className="mt-2 text-xl font-black">{post.title}</h5>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{post.summary}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
                   <strong>Why it matters:</strong> {post.why_it_matters}
                 </p>
               </Link>
             ))
           ) : (
-            <p className="text-sm text-stone-600">No weekly posts were stored for this week.</p>
+            <p className="text-sm text-slate-600">No weekly posts were stored for this week.</p>
           )}
         </div>
       </section>
@@ -177,11 +186,11 @@ function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creator
               <h4>{brief.title}</h4>
               <p>{brief.thesis}</p>
               {brief.implications.length ? (
-                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6">
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-600">
                   {brief.implications.map((item) => <li key={item}>{item}</li>)}
                 </ul>
               ) : null}
-              <p className="mt-3 text-sm leading-6 text-stone-600">
+              <p className="mt-3 text-sm leading-6 text-slate-600">
                 <strong>Uncertainty:</strong> {brief.uncertainty}
               </p>
             </article>
@@ -198,8 +207,8 @@ function EmptyWeek({ title }: { title: string }) {
   return (
     <section className="newspaper-sheet text-center">
       <p className="section-kicker">Empty week</p>
-      <h2 className="mt-3 font-serif text-4xl font-black">{title}</h2>
-      <p className="mx-auto mt-3 max-w-xl text-stone-600">
+      <h2 className="mt-3 text-4xl font-black tracking-tight text-slate-950">{title}</h2>
+      <p className="mx-auto mt-3 max-w-xl text-slate-600">
         Weekly editions appear after daily digests exist for a completed Sunday-to-Saturday week.
       </p>
     </section>
@@ -216,13 +225,13 @@ function NewsletterMarkdown({ markdown }: { markdown: string }) {
     <div className="prose-newsletter mt-6 space-y-4">
       {blocks.map((block, index) => {
         if (block.startsWith("### ")) {
-          return <h5 key={index} className="font-serif text-xl font-black text-stone-950">{block.slice(4)}</h5>;
+          return <h5 key={index} className="text-xl font-black text-slate-950">{block.slice(4)}</h5>;
         }
         if (block.startsWith("## ")) {
-          return <h4 key={index} className="font-serif text-2xl font-black text-stone-950">{block.slice(3)}</h4>;
+          return <h4 key={index} className="text-2xl font-black text-slate-950">{block.slice(3)}</h4>;
         }
         if (block.startsWith("# ")) {
-          return <h4 key={index} className="font-serif text-3xl font-black text-stone-950">{block.slice(2)}</h4>;
+          return <h4 key={index} className="text-3xl font-black text-slate-950">{block.slice(2)}</h4>;
         }
         if (block.split("\n").every((line) => line.trim().startsWith("- "))) {
           return (

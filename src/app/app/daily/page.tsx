@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CalendarDays, RotateCcw } from "lucide-react";
 import { DigestRenderer } from "@/components/digest-renderer";
 import { requireUser } from "@/lib/auth/current-user";
 import { getCreatorsForUser } from "@/lib/creators";
@@ -44,12 +45,18 @@ export default async function DailyPage({
   return (
     <div className="space-y-6">
       <section className="ink-panel">
+        <div className="mb-4 border-b border-slate-200 pb-4">
+          <h1 className="text-xl font-black text-slate-950">Daily digest preview</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Select a date and video, then load the stored edition.
+          </p>
+        </div>
         <form method="get" className="grid gap-4 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
           <input type="hidden" name="creatorId" value={creatorId} />
-          <label className="block text-sm font-bold text-stone-800">
+          <label className="form-label">
             Date
             <input
-              className="mt-2 h-11 w-full rounded border border-stone-300 bg-white px-3 text-stone-950"
+              className="field-control mt-2"
               name="date"
               type="date"
               defaultValue={selectedDate}
@@ -62,10 +69,10 @@ export default async function DailyPage({
             </datalist>
           </label>
           {picker.shouldShowVideoPicker ? (
-            <label className="block text-sm font-bold text-stone-800">
+            <label className="form-label">
               Video
               <select
-                className="mt-2 h-11 w-full rounded border border-stone-300 bg-white px-3 text-stone-950"
+                className="field-control mt-2"
                 name="videoId"
                 defaultValue={selected?.video_id}
               >
@@ -77,11 +84,15 @@ export default async function DailyPage({
               </select>
             </label>
           ) : null}
-          <button className="btn-secondary h-11 justify-center">Load edition</button>
+          <button className="btn-primary h-11 justify-center">
+            <CalendarDays aria-hidden className="size-4" />
+            Load edition
+          </button>
           <Link
             className="btn-secondary h-11 justify-center"
             href={`/app/daily?creatorId=${creatorId}&date=${today}`}
           >
+            <RotateCcw aria-hidden className="size-4" />
             Jump to current
           </Link>
         </form>
@@ -104,8 +115,8 @@ function EmptyPage({ title, href, action }: { title: string; href: string; actio
   return (
     <section className="newspaper-sheet text-center">
       <p className="section-kicker">Empty edition</p>
-      <h2 className="mt-3 font-serif text-4xl font-black">{title}</h2>
-      <p className="mx-auto mt-3 max-w-xl text-stone-600">
+      <h2 className="mt-3 text-4xl font-black tracking-tight text-slate-950">{title}</h2>
+      <p className="mx-auto mt-3 max-w-xl text-slate-600">
         Daily digests appear after a job discovers the video, prepares source material,
         and stores the edition.
       </p>
