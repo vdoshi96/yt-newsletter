@@ -81,6 +81,35 @@ describe("digest schemas", () => {
         advanced: "The week connected orchestration patterns, eval pressure, and deployment tradeoffs.",
       },
       ranked_topics: [{ topic: "Agents", importance_score: 0.9, why_it_matters: "Useful pattern." }],
+      executive_insights_memo:
+        "Board-level memo: AI infrastructure demand is moving from pilots to operating budgets.",
+      board_level_implications: ["Ask where AI spend reduces cycle time, not just headcount."],
+      market_investment_lens:
+        "The market signal is less about demos and more about durable demand for compute and workflow software.",
+      weekly_posts: Array.from({ length: 10 }, (_, index) => ({
+        date: `2026-05-${String(index + 1).padStart(2, "0")}`,
+        type: index % 2 === 0 ? "video" : "guide",
+        title: `AI item ${index + 1}`,
+        summary: "A source-backed weekly item.",
+        why_it_matters: "It helps readers track what changed.",
+      })),
+      research_briefs: [
+        {
+          title: "Inference economics",
+          thesis: "Costs matter because usage is shifting from experimentation to repeat workflows.",
+          evidence: ["Daily digest source", "Date-scoped external source"],
+          implications: ["Budget owners need unit-cost visibility."],
+          uncertainty: "Pricing and demand may change quickly.",
+        },
+      ],
+      source_notes: [
+        {
+          date: "2026-05-01",
+          label: "Source item",
+          url: "https://example.com/source",
+          note: "Used as date-scoped research context.",
+        },
+      ],
       what_changed: "More emphasis on evaluation.",
       what_to_do_next: ["Run a small free experiment."],
       free_learning_plan: ["Read free docs."],
@@ -89,6 +118,8 @@ describe("digest schemas", () => {
 
     expect(parsed.podcast_script).toContain("This week");
     expect(parsed.explanation_levels.intermediate).toContain("agent");
+    expect(parsed.weekly_posts).toHaveLength(10);
+    expect(parsed.research_briefs[0].title).toBe("Inference economics");
   });
 
   it("normalizes weekly provider scores from a 0-100 scale", () => {

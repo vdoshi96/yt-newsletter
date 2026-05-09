@@ -1,3 +1,4 @@
+import "./load-env";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -65,7 +66,6 @@ async function getWeeklyDigests() {
     select id, creator_id, week_start::text, week_end::text, title, full_digest_json
     from weekly_digests
     order by week_start desc
-    limit 4
   `;
 }
 

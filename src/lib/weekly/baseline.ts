@@ -156,6 +156,14 @@ function createEmptyWeekPayload(window: BaselineWeekWindow) {
         "No source-backed daily explanation levels are available for this week, so advanced synthesis is intentionally withheld.",
     },
     ranked_topics: [],
+    executive_insights_memo:
+      "No executive memo is available yet because this baseline week has no processed daily digests.",
+    board_level_implications: [],
+    market_investment_lens:
+      "No market or investment lens is available yet because there are no source-backed daily digests for this baseline week.",
+    weekly_posts: [],
+    research_briefs: [],
+    source_notes: [],
     what_changed:
       "No source-backed change summary is available because no daily digests exist for this week yet.",
     what_to_do_next: [

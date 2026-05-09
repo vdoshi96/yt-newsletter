@@ -3,15 +3,69 @@ import { booleanEnv } from "@/lib/config";
 import { getSql } from "@/lib/db";
 import { loadPrompt } from "@/lib/prompts";
 import { uploadGeneratedAsset } from "@/lib/supabase/storage";
+import {
+  getSundayToSaturdayWeekRange,
+  isWeeklyDigestReady,
+  type WeeklyRange,
+} from "@/lib/weekly/week-range";
 import { buildWeeklySourceText, type WeeklySourceDigest } from "@/lib/weekly/source-text";
 
 export async function ensureWeeklyDigestForVideoWeek(input: {
   creatorId: string;
-  publishedAt: string | null;
+  publishedAt: string | Date | null;
+  now?: Date;
 }) {
   if (!input.publishedAt) return null;
-  const { weekStart, weekEnd } = getWeekRange(input.publishedAt);
+  const range = getSundayToSaturdayWeekRange(input.publishedAt);
+  if (!isWeeklyDigestReady(range, input.now)) return null;
+
+  return ensureWeeklyDigestForRange({
+    creatorId: input.creatorId,
+    range,
+  });
+}
+
+export async function ensureCompletedWeeklyDigestsForCreator(input: {
+  creatorId: string;
+  now?: Date;
+  forceRegenerate?: boolean;
+}) {
   const sql = getSql();
+  const rows = await sql<Array<{ digest_date: string }>>`
+    select distinct digest_date::text as digest_date
+    from daily_digests
+    where creator_id = ${input.creatorId}
+    order by digest_date asc
+  `;
+
+  const rangesByStart = new Map<string, WeeklyRange>();
+  for (const row of rows) {
+    const range = getSundayToSaturdayWeekRange(row.digest_date);
+    if (isWeeklyDigestReady(range, input.now)) {
+      rangesByStart.set(range.weekStart, range);
+    }
+  }
+
+  const weekDigestIds: string[] = [];
+  for (const range of rangesByStart.values()) {
+    const id = await ensureWeeklyDigestForRange({
+      creatorId: input.creatorId,
+      range,
+      forceRegenerate: input.forceRegenerate,
+    });
+    if (id) weekDigestIds.push(id);
+  }
+
+  return { weekCount: weekDigestIds.length, weekDigestIds };
+}
+
+export async function ensureWeeklyDigestForRange(input: {
+  creatorId: string;
+  range: WeeklyRange;
+  forceRegenerate?: boolean;
+}) {
+  const sql = getSql();
+  const { weekStart, weekEnd } = input.range;
   const existing = await sql<{ id: string }[]>`
     select id
     from weekly_digests
@@ -19,7 +73,7 @@ export async function ensureWeeklyDigestForVideoWeek(input: {
       and week_start = ${weekStart}
     limit 1
   `;
-  if (existing[0]) return existing[0].id;
+  if (existing[0] && !input.forceRegenerate) return existing[0].id;
 
   const daily = await sql<WeeklySourceDigest[]>`
     select
@@ -34,7 +88,7 @@ export async function ensureWeeklyDigestForVideoWeek(input: {
       and digest_date between ${weekStart} and ${weekEnd}
     order by digest_date asc, created_at asc
   `;
-  if (!daily.length) return null;
+  if (!daily.length) return existing[0]?.id ?? null;
 
   const prompt = await loadPrompt("weekly_digest");
   const sourceText = buildWeeklySourceText(daily);
@@ -45,6 +99,24 @@ export async function ensureWeeklyDigestForVideoWeek(input: {
     sourceText,
     prompt,
   });
+
+  if (existing[0]) {
+    await sql`
+      update weekly_digests
+      set
+        week_end = ${weekEnd},
+        title = ${payload.title},
+        newsletter_markdown = ${payload.newsletter_markdown},
+        ranked_topics = ${sql.json(payload.ranked_topics)},
+        what_changed = ${payload.what_changed},
+        what_to_do_next = ${sql.json(payload.what_to_do_next)},
+        podcast_script = ${payload.podcast_script},
+        full_digest_json = ${sql.json(payload)},
+        updated_at = now()
+      where id = ${existing[0].id}
+    `;
+    return existing[0].id;
+  }
 
   const rows = await sql<{ id: string }[]>`
     insert into weekly_digests (
@@ -152,18 +224,4 @@ async function maybeGeneratePodcastAudio(input: {
     where id = ${input.weeklyDigestId}
   `;
   return assets[0].id;
-}
-
-function getWeekRange(isoDate: string) {
-  const date = new Date(isoDate);
-  const day = date.getUTCDay();
-  const diffToMonday = (day + 6) % 7;
-  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  start.setUTCDate(start.getUTCDate() - diffToMonday);
-  const end = new Date(start);
-  end.setUTCDate(start.getUTCDate() + 6);
-  return {
-    weekStart: start.toISOString().slice(0, 10),
-    weekEnd: end.toISOString().slice(0, 10),
-  };
 }

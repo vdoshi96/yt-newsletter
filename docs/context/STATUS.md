@@ -14,10 +14,11 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 - Queue processor endpoints and manual runner
 - Daily digest UI
 - Weekly digest and podcast pages
-- One-month baseline flow for Nate B. Jones with four weekly digest slots
+- One-month baseline flow for Nate B. Jones that starts with four weekly editions
+- Weekly digest archive behavior for all completed Sunday-to-Saturday weeks
 - Baseline video filtering that excludes Shorts-style and very short clips from the live starter data
 - Daily and weekly digest explanation levels: beginner, intermediate, and advanced
-- Four live two-host Qwen-generated weekly podcast MP3s attached to the starter baseline
+- Two-host Qwen-generated weekly podcast MP3s for stored weekly digests
 - Prompt files and Zod validation
 - Focused tests for parsing, auth, schemas, progress, and date/video selection
 

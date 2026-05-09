@@ -108,7 +108,7 @@ Queue and process the baseline in one run:
 npm run seed:baseline -- --process
 ```
 
-The baseline covers the past 28 calendar days as four seven-day weekly digest slots. For Nate B. Jones, it intentionally filters to main uploads by default: it fetches deeper than 50 uploads, excludes Shorts-style titles, and excludes videos shorter than `BASELINE_MIN_VIDEO_DURATION_SECONDS` seconds. This avoids counting YouTube Shorts or quick clips as daily baseline videos. The app also exposes this from `/app/settings` with “Seed past month baseline.”
+The baseline covers the past 28 calendar days, so it starts with four seven-day weekly editions. Those are not a permanent cap: completed Sunday-to-Saturday weekly digests are kept as an archive, and larger backfills can create more stored weekly digests. For Nate B. Jones, the baseline intentionally filters to main uploads by default: it fetches deeper than 50 uploads, excludes Shorts-style titles, and excludes videos shorter than `BASELINE_MIN_VIDEO_DURATION_SECONDS` seconds. This avoids counting YouTube Shorts or quick clips as daily baseline videos. The app also exposes this from `/app/settings` with “Seed past month baseline.”
 
 ## Manual Ingestion
 
@@ -125,10 +125,11 @@ From the command line:
 
 ```bash
 npm run ingest:process
+npm run weekly:refresh-research
 npm run podcasts:generate
 ```
 
-`npm run podcasts:generate` uses Qwen voice design/TTS to create two-host weekly podcast MP3s for the latest four weekly digests, then uploads them to Supabase Storage. The generated voices are described as a British-accented female host and an American-accented male host; they are not cloned from or intended to imitate real people.
+`npm run weekly:refresh-research` refreshes the starter weekly archive with date-scoped research notes and richer "This Week in AI" sections. `npm run podcasts:generate` uses Qwen voice design/TTS to create two-host weekly podcast MP3s for every stored weekly digest, then uploads them to Supabase Storage. The generated voices are described as a British-accented female host and an American-accented male host; they are not cloned from or intended to imitate real people.
 
 Protected endpoint:
 

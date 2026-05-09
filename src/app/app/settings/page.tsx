@@ -41,8 +41,8 @@ export default async function SettingsPage({
         <div className="ink-panel">
           <h3 className="section-kicker">One-month baseline</h3>
           <p className="mt-3 text-sm leading-6 text-stone-700">
-            Queue Nate B. Jones&apos;s past 28 days of videos and maintain four weekly
-            digest slots for the baseline website.
+            Queue Nate B. Jones&apos;s past 28 days of videos and seed the first four
+            weekly editions for the baseline website. Later completed weeks stay in the archive.
           </p>
           <form action={seedBaselineAction} className="mt-5">
             <SubmitButton className="btn-primary h-11 justify-center">

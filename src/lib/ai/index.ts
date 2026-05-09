@@ -110,6 +110,25 @@ export async function generateWeeklyDigestPayload(input: {
   const fallbackTitles = Array.from(input.sourceText.matchAll(/^Title:\s*(.+)$/gm))
     .map((match) => match[1])
     .slice(0, 8);
+  const fallbackDates = Array.from(input.sourceText.matchAll(/^Date:\s*(.+)$/gm)).map(
+    (match) => match[1],
+  );
+  const weeklyPosts = Array.from({ length: 10 }, (_, index) => {
+    const title = fallbackTitles[index % Math.max(fallbackTitles.length, 1)];
+    const date = fallbackDates[index % Math.max(fallbackDates.length, 1)] ?? input.weekStart;
+    const type = index < fallbackTitles.length ? "video" : index % 2 === 0 ? "guide" : "research";
+    return {
+      date,
+      type,
+      title: title ?? `Source-backed AI item ${index + 1}`,
+      summary:
+        index < fallbackTitles.length
+          ? "A cached daily digest from this week. Provider fallback mode keeps the item grounded in saved daily text."
+          : "A weekly learning item generated from the saved digest context because external provider output was unavailable.",
+      why_it_matters:
+        "It helps readers track the week without pretending to have unsupported market or technical evidence.",
+    };
+  });
 
   return weeklyDigestSchema.parse({
     title: `Weekly digest: ${input.weekStart} to ${input.weekEnd}`,
@@ -122,6 +141,30 @@ export async function generateWeeklyDigestPayload(input: {
         : "- No daily digest titles were available.") +
       "\n\n## Source-backed recap\n\n" +
       input.sourceText.slice(0, 2600),
+    executive_insights_memo:
+      "Weekly provider output was unavailable, so this memo stays conservative: treat the week as a set of source-backed creator themes, then regenerate when the weekly model route is healthy for deeper market and board-level synthesis.",
+    board_level_implications: [
+      "Ask what claims are directly supported by the daily digests before turning them into strategy.",
+      "Separate workflow value, infrastructure cost, and model capability when discussing AI investments.",
+    ],
+    market_investment_lens:
+      "No date-scoped external market research was available in fallback mode, so this section avoids investment claims beyond the cached weekly source material.",
+    weekly_posts: weeklyPosts,
+    research_briefs: [
+      {
+        title: "Provider fallback limits",
+        thesis:
+          "The app can preserve a weekly archive even when the preferred weekly model route fails, but deeper research should be regenerated with the full provider stack.",
+        evidence: ["Cached daily digest text", "Weekly provider route returned unusable JSON"],
+        implications: ["Readers get a grounded archive first, then richer synthesis after regeneration."],
+        uncertainty: "The fallback does not include independent market research.",
+      },
+    ],
+    source_notes: fallbackDates.slice(0, 10).map((date, index) => ({
+      date,
+      label: fallbackTitles[index] ?? `Daily digest ${index + 1}`,
+      note: "Cached daily digest used as fallback source context.",
+    })),
     explanation_levels: {
       beginner:
         "This week is summarized from the saved daily digests only. The app is not adding outside claims; it is grouping the creator's covered ideas into a simpler recap.",

@@ -15,6 +15,7 @@
     "seed:baseline": "tsx scripts/seed-baseline-month.ts",
     "seed": "npm run seed:user && npm run seed:creator",
     "ingest:process": "tsx scripts/process-ingest.ts",
+    "weekly:refresh-research": "tsx scripts/refresh-weekly-research.ts",
     "podcasts:generate": "tsx scripts/generate-weekly-podcasts.ts"
   },
   "dependencies": {

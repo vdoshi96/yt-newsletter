@@ -6,7 +6,7 @@ Initial local build session. Created the Next.js app, schema, auth, ingestion pr
 
 ## 2026-05-09 Baseline Update
 
-Added a one-month baseline flow: the creator form now defaults to “Past month,” settings has a “Seed past month baseline” action for Nate B. Jones, `npm run seed:baseline -- --process` can populate the baseline, and weekly/podcast pages show the latest four weekly slots.
+Added a one-month baseline flow: the creator form now defaults to “Past month,” settings has a “Seed past month baseline” action for Nate B. Jones, and `npm run seed:baseline -- --process` can populate the baseline.
 
 ## 2026-05-09 Baseline Methodology Fix
 
@@ -23,3 +23,7 @@ Added beginner, intermediate, and advanced explanation levels to daily and weekl
 ## 2026-05-09 Two-Host Qwen Podcasts
 
 Added `npm run podcasts:generate` to create two-host weekly podcast MP3s with Qwen voice design/TTS, using generic British-accented female and American-accented male host descriptions instead of cloning or imitating real people. Generated and attached four live podcast audio assets for the Nate B. Jones baseline weeks.
+
+## 2026-05-09 Weekly Archive Rework
+
+Reworked weekly digests from a latest-four recap into a stored "This Week in AI" archive. The first backfill still starts with four weekly editions because it covers the past 28 days, but future completed Sunday-to-Saturday weeks and larger backfills remain stored. Weekly payloads now include an executive insights memo, board-level implications, market/investment lens, about 10 weekly posts, deep research briefs, source notes, and beginner/intermediate/advanced explanations.

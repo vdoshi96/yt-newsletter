@@ -4,7 +4,7 @@ import { getSql } from "@/lib/db";
 import { digestDateFromPublishedAt } from "@/lib/digests/date";
 import { loadPrompt } from "@/lib/prompts";
 import { fetchFreeTranscript } from "@/lib/youtube/transcripts";
-import { ensurePastMonthWeeklyDigests } from "@/lib/weekly/baseline";
+import { ensureCompletedWeeklyDigestsForCreator } from "@/lib/weekly/generate";
 
 type QueueItem = {
   item_id: string;
@@ -57,11 +57,9 @@ export async function processIngestQueue(limit = numberEnv("MAX_VIDEOS_PROCESSED
 
   for (const creatorId of touchedCreators) {
     const openItems = await countOpenItemsForCreator(creatorId);
-    await ensurePastMonthWeeklyDigests({
-      creatorId,
-      generateFromSources: openItems === 0,
-      forceRegenerate: openItems === 0,
-    });
+    if (openItems === 0) {
+      await ensureCompletedWeeklyDigestsForCreator({ creatorId });
+    }
   }
 
   return { processed, limit };
@@ -388,6 +386,7 @@ export async function checkCreatorsForNewVideos() {
       );
       jobsCreated += 1;
     }
+    await ensureCompletedWeeklyDigestsForCreator({ creatorId: creator.id });
     await sql`update creators set last_checked_at = now(), updated_at = now() where id = ${creator.id}`;
   }
 

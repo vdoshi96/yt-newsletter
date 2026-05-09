@@ -31,8 +31,8 @@ export default async function PodcastsPage({
         <p className="section-kicker">Audio desk</p>
         <h2 className="mt-3 font-serif text-5xl font-black">Weekly podcast summaries</h2>
         <p className="mt-4 max-w-3xl text-stone-700">
-          Podcast scripts are generated with the weekly digest. Audio is created only when
-          `GENERATE_AUDIO=true` and the Qwen TTS/Supabase Storage settings are available.
+          Podcast scripts are generated with weekly digests and stored as an archive.
+          Audio appears when generated with Qwen TTS and Supabase Storage.
         </p>
       </section>
 
@@ -92,6 +92,5 @@ async function getPodcasts(userId: string, creatorId: string) {
     where user_creators.user_id = ${userId}
       and weekly_digests.creator_id = ${creatorId}
     order by weekly_digests.week_start desc
-    limit 4
   `;
 }

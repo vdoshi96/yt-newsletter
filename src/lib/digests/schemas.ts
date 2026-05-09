@@ -29,6 +29,30 @@ const sourceNoteSchema = z.object({
   note: z.string().min(1),
 });
 
+const weeklySourceNoteSchema = z.object({
+  date: z.string().min(1),
+  label: z.string().min(1),
+  url: z.string().url().or(z.string().min(1)).optional(),
+  note: z.string().min(1),
+});
+
+const weeklyPostSchema = z.object({
+  date: z.string().min(1),
+  type: z.string().min(1),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  why_it_matters: z.string().min(1),
+  source_url: z.string().url().or(z.string().min(1)).optional(),
+});
+
+const researchBriefSchema = z.object({
+  title: z.string().min(1),
+  thesis: z.string().min(1),
+  evidence: z.array(z.string()).default([]),
+  implications: z.array(z.string()).default([]),
+  uncertainty: z.string().min(1),
+});
+
 const explanationLevelsSchema = z.object(
   Object.fromEntries(EXPLANATION_LEVEL_KEYS.map((level) => [level, z.string().min(1)])) as Record<
     (typeof EXPLANATION_LEVEL_KEYS)[number],
@@ -78,6 +102,12 @@ export const weeklyDigestSchema = z
     title: z.string().min(1),
     newsletter_markdown: z.string().min(1),
     explanation_levels: explanationLevelsSchema.optional(),
+    executive_insights_memo: z.string().default("No executive memo is available yet."),
+    board_level_implications: z.array(z.string()).default([]),
+    market_investment_lens: z.string().default("No market or investment lens is available yet."),
+    weekly_posts: z.array(weeklyPostSchema).default([]),
+    research_briefs: z.array(researchBriefSchema).default([]),
+    source_notes: z.array(weeklySourceNoteSchema).default([]),
     ranked_topics: z
       .array(
         z.object({
