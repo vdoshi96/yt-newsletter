@@ -20,6 +20,8 @@ This queues Nate B. Jones main uploads from the past 28 calendar days and confir
 
 Queue ingestion from `/app/creators`, then process with `/app/settings` or `npm run ingest:process`.
 
+Run `npm run daily:refresh-follow-ups` to rebuild stored daily follow-up text from the nearest prior daily digest for each creator.
+
 Run `npm run weekly:refresh-research` to refresh the starter weekly archive with the curated date-scoped research notes used for the baseline "This Week in AI" editions.
 
 ## Verification

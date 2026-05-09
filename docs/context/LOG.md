@@ -27,3 +27,7 @@ Added `npm run podcasts:generate` to create two-host weekly podcast MP3s with Qw
 ## 2026-05-09 Weekly Archive Rework
 
 Reworked weekly digests from a latest-four recap into a stored "This Week in AI" archive. The first backfill still starts with four weekly editions because it covers the past 28 days, but future completed Sunday-to-Saturday weeks and larger backfills remain stored. Weekly payloads now include an executive insights memo, board-level implications, market/investment lens, about 10 weekly posts, deep research briefs, source notes, and beginner/intermediate/advanced explanations.
+
+## 2026-05-09 Daily Follow-Up Fix
+
+Fixed daily "follow-up from yesterday" continuity. Daily generation now receives prior-digest context and stores a deterministic source-backed bridge to the nearest previous daily digest. Added `npm run daily:refresh-follow-ups` and refreshed the live starter daily rows.

@@ -11,6 +11,7 @@ export async function generateDailyDigestPayload(input: {
   transcriptOrNotes: string;
   transcriptSource: string;
   prompt: string;
+  previousDailyContext?: string;
 }) {
   const messages: ChatMessage[] = [
     {
@@ -20,7 +21,10 @@ export async function generateDailyDigestPayload(input: {
     },
     {
       role: "user",
-      content: `${input.prompt}\n\nVIDEO TITLE:\n${input.title}\n\nSOURCE TYPE:\n${input.transcriptSource}\n\nSOURCE TEXT:\n${input.transcriptOrNotes}`,
+      content:
+        `${input.prompt}\n\nVIDEO TITLE:\n${input.title}\n\nSOURCE TYPE:\n${input.transcriptSource}` +
+        `\n\nPREVIOUS DAILY DIGEST CONTEXT:\n${input.previousDailyContext ?? "No prior daily digest is available for this creator."}` +
+        `\n\nSOURCE TEXT:\n${input.transcriptOrNotes}`,
     },
   ];
 

@@ -125,11 +125,12 @@ From the command line:
 
 ```bash
 npm run ingest:process
+npm run daily:refresh-follow-ups
 npm run weekly:refresh-research
 npm run podcasts:generate
 ```
 
-`npm run weekly:refresh-research` refreshes the starter weekly archive with date-scoped research notes and richer "This Week in AI" sections. `npm run podcasts:generate` uses Qwen voice design/TTS to create two-host weekly podcast MP3s for every stored weekly digest, then uploads them to Supabase Storage. The generated voices are described as a British-accented female host and an American-accented male host; they are not cloned from or intended to imitate real people.
+`npm run daily:refresh-follow-ups` rebuilds stored daily "follow-up from yesterday" text from the nearest prior daily digest for each creator. `npm run weekly:refresh-research` refreshes the starter weekly archive with date-scoped research notes and richer "This Week in AI" sections. `npm run podcasts:generate` uses Qwen voice design/TTS to create two-host weekly podcast MP3s for every stored weekly digest, then uploads them to Supabase Storage. The generated voices are described as a British-accented female host and an American-accented male host; they are not cloned from or intended to imitate real people.
 
 Protected endpoint:
 

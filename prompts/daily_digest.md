@@ -33,3 +33,4 @@ Rules:
 - `explanation_levels.intermediate` may introduce practical technical ideas, but define any jargon in normal language.
 - `explanation_levels.advanced` may discuss architecture, tradeoffs, evaluation, and implementation details, while still marking uncertainty and staying source-grounded.
 - Keep the digest useful even if the source is partial.
+- For `follow_up_from_yesterday`, use the supplied previous daily digest context. If yesterday's digest exists, explain how today's video continues, contradicts, deepens, or changes the prior edition. If no yesterday digest exists, say so plainly and use the latest prior digest only as nearest context.

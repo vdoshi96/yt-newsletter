@@ -2,6 +2,10 @@ import { generateDailyDigestPayload, generateGeminiVideoNotes } from "@/lib/ai";
 import { booleanEnv, numberEnv } from "@/lib/config";
 import { getSql } from "@/lib/db";
 import { digestDateFromPublishedAt } from "@/lib/digests/date";
+import {
+  buildDailyFollowUp,
+  type DailyFollowUpDigest,
+} from "@/lib/digests/follow-up";
 import { loadPrompt } from "@/lib/prompts";
 import { fetchFreeTranscript } from "@/lib/youtube/transcripts";
 import { ensureCompletedWeeklyDigestsForCreator } from "@/lib/weekly/generate";
@@ -256,6 +260,8 @@ async function ensureDailyDigest(
   const transcriptOrNotes =
     transcript.transcript_text ??
     JSON.stringify(transcript.derived_notes ?? {}, null, 2);
+  const digestDate = digestDateFromPublishedAt(item.published_at);
+  const previousDigests = await getPreviousDailyDigests(item.creator_id, digestDate);
   const payload = await generateDailyDigestPayload({
     creatorId: item.creator_id,
     videoId: item.video_id,
@@ -263,8 +269,20 @@ async function ensureDailyDigest(
     transcriptOrNotes,
     transcriptSource: transcript.source,
     prompt,
+    previousDailyContext: formatPreviousDailyContext(digestDate, previousDigests),
   });
-  const digestDate = digestDateFromPublishedAt(item.published_at);
+  const payloadWithFollowUp = {
+    ...payload,
+    follow_up_from_yesterday: buildDailyFollowUp({
+      current: {
+        digestDate,
+        title: payload.title,
+        frontPageSummary: payload.front_page_summary,
+        whyItMatters: payload.why_it_matters,
+      },
+      previous: previousDigests,
+    }),
+  };
 
   const rows = await sql<{ id: string }[]>`
     insert into daily_digests (
@@ -290,24 +308,74 @@ async function ensureDailyDigest(
       ${item.creator_id},
       ${item.video_id},
       ${digestDate},
-      ${payload.layout_type},
+      ${payloadWithFollowUp.layout_type},
       0.5,
-      ${payload.title},
-      ${payload.dek},
-      ${payload.front_page_summary},
-      ${payload.plain_english_explanation},
-      ${payload.why_it_matters},
-      ${sql.json(payload.what_to_do_next)},
-      ${sql.json(payload.free_learning_plan)},
-      ${sql.json(payload.glossary)},
-      ${sql.json(payload.topic_links)},
-      ${payload.skepticism_notes},
-      ${sql.json(payload.source_notes)},
-      ${sql.json(toJsonParameter(payload))}
+      ${payloadWithFollowUp.title},
+      ${payloadWithFollowUp.dek},
+      ${payloadWithFollowUp.front_page_summary},
+      ${payloadWithFollowUp.plain_english_explanation},
+      ${payloadWithFollowUp.why_it_matters},
+      ${sql.json(payloadWithFollowUp.what_to_do_next)},
+      ${sql.json(payloadWithFollowUp.free_learning_plan)},
+      ${sql.json(payloadWithFollowUp.glossary)},
+      ${sql.json(payloadWithFollowUp.topic_links)},
+      ${payloadWithFollowUp.skepticism_notes},
+      ${sql.json(payloadWithFollowUp.source_notes)},
+      ${sql.json(toJsonParameter(payloadWithFollowUp))}
     )
     returning id
   `;
   return rows[0].id;
+}
+
+async function getPreviousDailyDigests(creatorId: string, digestDate: string) {
+  const sql = getSql();
+  const rows = await sql<
+    Array<{
+      digest_date: string;
+      title: string;
+      front_page_summary: string;
+      why_it_matters: string;
+    }>
+  >`
+    with latest_prior_date as (
+      select max(digest_date) as digest_date
+      from daily_digests
+      where creator_id = ${creatorId}
+        and digest_date < ${digestDate}
+    )
+    select
+      daily_digests.digest_date::text as digest_date,
+      daily_digests.title,
+      daily_digests.front_page_summary,
+      daily_digests.why_it_matters
+    from daily_digests, latest_prior_date
+    where daily_digests.creator_id = ${creatorId}
+      and daily_digests.digest_date = latest_prior_date.digest_date
+    order by daily_digests.created_at asc
+  `;
+  return rows.map((row) => ({
+    digestDate: row.digest_date,
+    title: row.title,
+    frontPageSummary: row.front_page_summary,
+    whyItMatters: row.why_it_matters,
+  }));
+}
+
+function formatPreviousDailyContext(digestDate: string, previous: DailyFollowUpDigest[]) {
+  if (!previous.length) return "No prior daily digest is available for this creator.";
+  return [
+    `Current digest date: ${digestDate}`,
+    "Nearest prior daily digest context:",
+    ...previous.map((digest) =>
+      [
+        `Date: ${digest.digestDate}`,
+        `Title: ${digest.title}`,
+        `Summary: ${digest.frontPageSummary}`,
+        `Why it mattered: ${digest.whyItMatters ?? "No why-it-matters text stored."}`,
+      ].join("\n"),
+    ),
+  ].join("\n\n");
 }
 
 function toJsonParameter(value: unknown) {
