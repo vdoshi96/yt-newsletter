@@ -125,7 +125,10 @@ From the command line:
 
 ```bash
 npm run ingest:process
+npm run podcasts:generate
 ```
+
+`npm run podcasts:generate` uses Qwen voice design/TTS to create two-host weekly podcast MP3s for the latest four weekly digests, then uploads them to Supabase Storage. The generated voices are described as a British-accented female host and an American-accented male host; they are not cloned from or intended to imitate real people.
 
 Protected endpoint:
 

@@ -14,7 +14,8 @@
     "seed:creator": "tsx scripts/seed-creator.ts",
     "seed:baseline": "tsx scripts/seed-baseline-month.ts",
     "seed": "npm run seed:user && npm run seed:creator",
-    "ingest:process": "tsx scripts/process-ingest.ts"
+    "ingest:process": "tsx scripts/process-ingest.ts",
+    "podcasts:generate": "tsx scripts/generate-weekly-podcasts.ts"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",

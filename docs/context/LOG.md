@@ -19,3 +19,7 @@ Confirmed protected tabs appeared to kick users out because the app shell render
 ## 2026-05-09 Explanation Levels
 
 Added beginner, intermediate, and advanced explanation levels to daily and weekly digest JSON contracts. Daily and weekly pages now show a Level dropdown, and weekly synthesis source text carries all three daily explanation levels forward so weekly digests can summarize at each reader level.
+
+## 2026-05-09 Two-Host Qwen Podcasts
+
+Added `npm run podcasts:generate` to create two-host weekly podcast MP3s with Qwen voice design/TTS, using generic British-accented female and American-accented male host descriptions instead of cloning or imitating real people. Generated and attached four live podcast audio assets for the Nate B. Jones baseline weeks.
