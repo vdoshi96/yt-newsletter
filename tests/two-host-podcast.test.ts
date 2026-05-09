@@ -2,11 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
   buildTwoHostPodcastLines,
   formatTwoHostPodcastScript,
+  getPodcastCastForWeek,
 } from "../src/lib/podcasts/two-host";
 import { weeklyDigestSchema } from "../src/lib/digests/schemas";
 
 describe("two-host podcast scripts", () => {
-  it("uses British female and American male hosts across weekly explanation levels", () => {
+  it("rotates Gemini host casts by week", () => {
+    expect(getPodcastCastForWeek("2026-05-03").id).toBe("puck_kora");
+    expect(getPodcastCastForWeek("2026-05-10").id).toBe("achird_silafat");
+    expect(getPodcastCastForWeek("2026-05-17").id).toBe("puck_kora");
+  });
+
+  it("opens with rotating host introductions and podcast-style banter", () => {
     const digest = weeklyDigestSchema.parse({
       title: "Week of careful AI",
       newsletter_markdown: "# Week\n\nSource-backed summary.",
@@ -24,13 +31,20 @@ describe("two-host podcast scripts", () => {
       podcast_script: "Legacy script.",
     });
 
-    const lines = buildTwoHostPodcastLines(digest);
+    const cast = getPodcastCastForWeek("2026-05-03");
+    const lines = buildTwoHostPodcastLines(digest, undefined, cast);
     const script = formatTwoHostPodcastScript(lines);
 
-    expect(lines.some((line) => line.host === "female_british")).toBe(true);
-    expect(lines.some((line) => line.host === "male_american")).toBe(true);
-    expect(script).toContain("Clara:");
-    expect(script).toContain("Ben:");
+    expect(cast.hosts.primary.geminiVoice).toBe("Puck");
+    expect(cast.hosts.secondary.geminiVoice).toBe("Kore");
+    expect(lines.some((line) => line.host === "primary")).toBe(true);
+    expect(lines.some((line) => line.host === "secondary")).toBe(true);
+    expect(script).toContain("Puck:");
+    expect(script).toContain("Kora:");
+    expect(script).toContain("I'm Puck");
+    expect(script).toContain("I'm Kora");
+    expect(script).toContain("rotating cast");
+    expect(script).toContain("proper podcast");
     expect(script).toContain("AI tools are helpers");
     expect(script).toContain("orchestration under uncertainty");
   });

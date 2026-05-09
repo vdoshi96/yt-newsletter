@@ -1,7 +1,11 @@
 import { numberEnv } from "../config";
 
 export type PodcastGenerationMode = "two_host_deep_dive" | "provider_script";
-export type PodcastTtsProvider = "qwen_voice_design" | "qwen_simple" | "external_manual";
+export type PodcastTtsProvider =
+  | "gemini_flash"
+  | "qwen_voice_design"
+  | "qwen_simple"
+  | "external_manual";
 
 export type PodcastScriptConfig = {
   targetMinutes: number;
@@ -31,12 +35,14 @@ export function getPodcastTargetWordCount(config = getPodcastScriptConfig()) {
 }
 
 export function getPodcastAudioConfig(): PodcastAudioConfig {
+  const provider = parseTtsProvider(process.env.PODCAST_TTS_PROVIDER);
   return {
-    provider: parseTtsProvider(process.env.PODCAST_TTS_PROVIDER),
+    provider,
     ttsModel:
-      process.env.PODCAST_TTS_MODEL ??
-      process.env.QWEN_TTS_MODEL ??
-      "qwen3-tts-vd-2026-01-26",
+      cleanOptional(process.env.PODCAST_TTS_MODEL) ??
+      (provider === "gemini_flash"
+        ? cleanOptional(process.env.GEMINI_TTS_MODEL) ?? "gemini-2.5-flash-preview-tts"
+        : cleanOptional(process.env.QWEN_TTS_MODEL) ?? "qwen3-tts-vd-2026-01-26"),
     voiceDesignModel: process.env.QWEN_VOICE_DESIGN_MODEL ?? "qwen-voice-design",
     femaleVoice:
       cleanOptional(process.env.PODCAST_FEMALE_VOICE) ??
@@ -53,8 +59,11 @@ function parseGenerationMode(value: string | undefined): PodcastGenerationMode {
 }
 
 function parseTtsProvider(value: string | undefined): PodcastTtsProvider {
-  if (value === "qwen_simple" || value === "external_manual") return value;
-  return "qwen_voice_design";
+  if (value === "gemini_flash") return value;
+  if (value === "qwen_voice_design" || value === "qwen_simple" || value === "external_manual") {
+    return value;
+  }
+  return "gemini_flash";
 }
 
 function cleanOptional(value: string | undefined) {

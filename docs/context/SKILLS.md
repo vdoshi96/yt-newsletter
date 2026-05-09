@@ -31,7 +31,7 @@ Run `npm run daily:refresh-follow-ups` to rebuild stored daily follow-up text fr
 
 Run `npm run weekly:refresh-research` to refresh the starter weekly archive with the curated date-scoped research notes used for the baseline "This Week in AI" editions.
 
-Run `npm run podcasts:generate` to regenerate stored weekly podcast MP3s with the segmented two-host Qwen voice-design path.
+Run `npm run podcasts:generate` to regenerate stored weekly podcast MP3s with the rotating two-host Gemini Flash path.
 
 ## Verification
 

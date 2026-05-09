@@ -38,12 +38,13 @@ Configuration:
 - `PODCAST_SCRIPT_TARGET_MINUTES` controls script length target. Default: `8`.
 - `PODCAST_SCRIPT_WORDS_PER_MINUTE` controls word target math. Default: `145`.
 - `PODCAST_GENERATION_MODE` defaults to `two_host_deep_dive`.
-- `PODCAST_TTS_PROVIDER` defaults to `qwen_voice_design`.
-- `PODCAST_TTS_MODEL` or `QWEN_TTS_MODEL` selects the TTS model.
-- `PODCAST_FEMALE_VOICE` / `PODCAST_MALE_VOICE` override designed voices.
+- `PODCAST_TTS_PROVIDER` defaults to `gemini_flash`.
+- `GEMINI_TTS_MODEL` or `PODCAST_TTS_MODEL` selects the Gemini Flash TTS model.
+- Gemini host casts rotate by week between Puck/Kora (`Puck` + `Kore`) and Achird/Silafat (`Achird` + `Sulafat`).
+- `PODCAST_FEMALE_VOICE` / `PODCAST_MALE_VOICE` only apply to the optional Qwen voice-designed path.
 - `PODCAST_AUDIO_BITRATE` controls MP3 export bitrate for `npm run podcasts:generate`. Default: `128k`.
 
-`npm run podcasts:generate` is the preferred high-quality path because it uses segmented two-host Qwen voice design and ffmpeg concatenation. Inline weekly generation skips audio unless `PODCAST_TTS_PROVIDER=qwen_simple`, which avoids accidentally producing a single-voice default TTS file.
+`npm run podcasts:generate` is the preferred high-quality path because it uses Gemini Flash native multi-speaker TTS by default and stores an MP3 in Supabase. Inline weekly generation skips audio unless `PODCAST_TTS_PROVIDER=qwen_simple`, which avoids accidentally producing a single-voice default TTS file.
 
 NotebookLM currently has no stable app API for automated generation from this app. Treat NotebookLM as a manual external production option; the automated path here is the best feasible stack-native alternative.
 

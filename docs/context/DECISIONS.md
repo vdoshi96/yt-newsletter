@@ -26,7 +26,7 @@ Creator discovery runs hourly and queue processing runs every five minutes. Disc
 
 ## 2026-05-09: Podcast Quality Path
 
-The automated high-quality podcast path is `npm run podcasts:generate`, using a long-form two-host script and Qwen voice-designed segmented TTS. Inline weekly generation does not create default single-voice audio unless `PODCAST_TTS_PROVIDER=qwen_simple` is explicitly selected. NotebookLM is documented as manual because it does not expose a stable app API for this workflow.
+The automated high-quality podcast path is `npm run podcasts:generate`, using a long-form two-host script and Gemini Flash native multi-speaker TTS by default. Host casts rotate weekly between Puck/Kora and Achird/Silafat. The older Qwen voice-designed segmented path remains available as an explicit provider. Inline weekly generation does not create default single-voice audio unless `PODCAST_TTS_PROVIDER=qwen_simple` is explicitly selected. NotebookLM is documented as manual because it does not expose a stable app API for this workflow.
 
 ## 2026-05-09: Weekly Calendar Navigation
 

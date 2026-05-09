@@ -5,6 +5,7 @@ import { loadPrompt } from "@/lib/prompts";
 import {
   buildTwoHostPodcastLines,
   formatTwoHostPodcastScript,
+  getPodcastCastForWeek,
 } from "@/lib/podcasts/two-host";
 import { getPodcastAudioConfig } from "@/lib/podcasts/config";
 import { uploadGeneratedAsset } from "@/lib/supabase/storage";
@@ -106,7 +107,9 @@ export async function ensureWeeklyDigestForRange(input: {
   });
   const payload = {
     ...generatedPayload,
-    podcast_script: formatTwoHostPodcastScript(buildTwoHostPodcastLines(generatedPayload)),
+    podcast_script: formatTwoHostPodcastScript(
+      buildTwoHostPodcastLines(generatedPayload, undefined, getPodcastCastForWeek(weekStart)),
+    ),
   };
 
   if (existing[0]) {
@@ -181,7 +184,7 @@ async function maybeGeneratePodcastAudio(input: {
     console.info("[podcast:audio-skipped]", {
       weeklyDigestId: input.weeklyDigestId,
       provider: audioConfig.provider,
-      reason: "Use npm run podcasts:generate for segmented voice-designed audio.",
+      reason: "Use npm run podcasts:generate for full two-host podcast audio.",
     });
     return null;
   }

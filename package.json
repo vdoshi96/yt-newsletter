@@ -17,7 +17,8 @@
     "ingest:process": "tsx scripts/process-ingest.ts",
     "daily:refresh-follow-ups": "tsx scripts/refresh-daily-follow-ups.ts",
     "weekly:refresh-research": "tsx scripts/refresh-weekly-research.ts",
-    "podcasts:generate": "tsx scripts/generate-weekly-podcasts.ts"
+    "podcasts:generate": "tsx scripts/generate-weekly-podcasts.ts",
+    "voice:sampler": "tsx scripts/voice-sampler-server.ts"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",

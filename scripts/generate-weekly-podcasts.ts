@@ -9,6 +9,8 @@ import { weeklyDigestSchema } from "@/lib/digests/schemas";
 import {
   buildTwoHostPodcastLines,
   formatTwoHostPodcastScript,
+  getPodcastCastForWeek,
+  type PodcastHostCast,
   type PodcastHostKey,
 } from "@/lib/podcasts/two-host";
 import { getPodcastAudioConfig } from "@/lib/podcasts/config";
@@ -24,9 +26,13 @@ const ttsUrl =
 const voiceDesignModel = audioConfig.voiceDesignModel;
 const configuredTtsModel = audioConfig.ttsModel;
 const ttsModel =
-  configuredTtsModel && configuredTtsModel !== "cosyvoice-v1"
+  audioConfig.provider !== "gemini_flash" && configuredTtsModel && configuredTtsModel !== "cosyvoice-v1"
     ? configuredTtsModel
     : "qwen3-tts-vd-2026-01-26";
+const geminiModel =
+  audioConfig.provider === "gemini_flash"
+    ? audioConfig.ttsModel
+    : process.env.GEMINI_TTS_MODEL ?? "gemini-2.5-flash-preview-tts";
 
 type WeeklyDigestRow = {
   id: string;
@@ -43,11 +49,20 @@ type HostVoice = {
 };
 
 async function main() {
-  const apiKey = optionalEnv("DASHSCOPE_API_KEY") ?? optionalEnv("QWEN_API_KEY");
-  if (!apiKey) throw new Error("DASHSCOPE_API_KEY or QWEN_API_KEY is required.");
+  const provider = audioConfig.provider;
+  const apiKey =
+    provider === "gemini_flash"
+      ? optionalEnv("GEMINI_API_KEY")
+      : optionalEnv("DASHSCOPE_API_KEY") ?? optionalEnv("QWEN_API_KEY");
+  if (!apiKey) {
+    throw new Error(
+      provider === "gemini_flash"
+        ? "GEMINI_API_KEY is required."
+        : "DASHSCOPE_API_KEY or QWEN_API_KEY is required.",
+    );
+  }
 
   try {
-    const voices = await getPodcastVoices(apiKey);
     const rows = await getWeeklyDigests();
     if (!rows.length) {
       console.log("No weekly digests found.");
@@ -55,7 +70,7 @@ async function main() {
     }
 
     for (const row of rows) {
-      await generatePodcastForWeek({ apiKey, row, voices });
+      await generatePodcastForWeek({ apiKey, row });
     }
   } finally {
     await closeSql();
@@ -71,30 +86,29 @@ async function getWeeklyDigests() {
   `;
 }
 
-async function getPodcastVoices(apiKey: string): Promise<Record<PodcastHostKey, HostVoice>> {
-  const femaleVoice =
+async function getPodcastVoices(
+  apiKey: string,
+  cast: PodcastHostCast,
+): Promise<Record<PodcastHostKey, HostVoice>> {
+  const primaryVoice =
     audioConfig.femaleVoice ??
     (await createVoice(apiKey, {
-      preferredName: "brit_host",
-      prompt:
-        "A British-accented female podcast host for analytical financial and technology news: crisp diction, dry warmth, thoughtful pacing, not imitating any real person.",
-      preview:
-        "Welcome back. Let us take the claims carefully and separate signal from noise.",
+      preferredName: `${cast.id}_primary`,
+      prompt: `${cast.hosts.primary.description} Not imitating any real person.`,
+      preview: `Welcome back. I'm ${cast.hosts.primary.name}, and today we are separating signal from noise.`,
     }));
 
-  const maleVoice =
+  const secondaryVoice =
     audioConfig.maleVoice ??
     (await createVoice(apiKey, {
-      preferredName: "us_host",
-      prompt:
-        "An American-accented male podcast co-host for analytical financial and technology news: warm, skeptical, conversational, plain-spoken, not imitating any real person.",
-      preview:
-        "The question is what changed, what is still uncertain, and what a smart listener can do next.",
+      preferredName: `${cast.id}_secondary`,
+      prompt: `${cast.hosts.secondary.description} Not imitating any real person.`,
+      preview: `I'm ${cast.hosts.secondary.name}. The question is what changed, what is uncertain, and what to do next.`,
     }));
 
   return {
-    female_british: { host: "female_british", voice: femaleVoice },
-    male_american: { host: "male_american", voice: maleVoice },
+    primary: { host: "primary", voice: primaryVoice },
+    secondary: { host: "secondary", voice: secondaryVoice },
   };
 }
 
@@ -134,33 +148,49 @@ async function createVoice(
 async function generatePodcastForWeek(input: {
   apiKey: string;
   row: WeeklyDigestRow;
-  voices: Record<PodcastHostKey, HostVoice>;
 }) {
   const digest = weeklyDigestSchema.parse(input.row.full_digest_json);
-  const lines = buildTwoHostPodcastLines(digest);
+  const cast = getPodcastCastForWeek(input.row.week_start);
+  const lines = buildTwoHostPodcastLines(digest, undefined, cast);
   const script = formatTwoHostPodcastScript(lines);
   const workDir = path.join(tmpdir(), `yt-newsletter-podcast-${randomUUID()}`);
   await mkdir(workDir, { recursive: true });
 
   try {
-    const segmentPaths: string[] = [];
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index];
-      const voice = input.voices[line.host].voice;
-      const segmentPath = path.join(workDir, `segment-${String(index).padStart(2, "0")}.wav`);
-      await synthesizeLine({
+    const outputPath = path.join(workDir, "podcast.mp3");
+
+    if (audioConfig.provider === "gemini_flash") {
+      const wavPath = path.join(workDir, "podcast.wav");
+      await synthesizeGeminiPodcast({
         apiKey: input.apiKey,
-        voice,
-        text: line.text,
-        outputPath: segmentPath,
+        cast,
+        script,
+        outputPath: wavPath,
       });
-      segmentPaths.push(segmentPath);
+      await convertAudio(wavPath, outputPath);
+    } else {
+      const voices = await getPodcastVoices(input.apiKey, cast);
+      const segmentPaths: string[] = [];
+      for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        const voice = voices[line.host].voice;
+        const segmentPath = path.join(workDir, `segment-${String(index).padStart(2, "0")}.wav`);
+        await synthesizeQwenLine({
+          apiKey: input.apiKey,
+          voice,
+          text: line.text,
+          outputPath: segmentPath,
+        });
+        segmentPaths.push(segmentPath);
+      }
+      await concatenateAudio(segmentPaths, outputPath);
     }
 
-    const outputPath = path.join(workDir, "podcast.mp3");
-    await concatenateAudio(segmentPaths, outputPath);
     const audio = await readFile(outputPath);
-    const storagePath = `podcasts/${input.row.creator_id}/${input.row.week_start}-two-host.mp3`;
+    const provider = audioConfig.provider === "gemini_flash" ? "gemini" : "qwen";
+    const model = audioConfig.provider === "gemini_flash" ? geminiModel : ttsModel;
+    const characterCount = lines.reduce((sum, line) => sum + line.text.length, 0);
+    const storagePath = `podcasts/${input.row.creator_id}/${input.row.week_start}-${provider}-${cast.id}.mp3`;
     const publicUrl = await uploadGeneratedAsset({
       path: storagePath,
       contentType: "audio/mpeg",
@@ -171,17 +201,94 @@ async function generatePodcastForWeek(input: {
       script,
       storagePath,
       publicUrl,
-      characterCount: lines.reduce((sum, line) => sum + line.text.length, 0),
+      characterCount,
+      provider,
+      model,
+      estimatedCostUsd: estimateAudioCostUsd(provider, characterCount),
     });
     console.log(
-      `Generated two-host podcast for ${input.row.week_start} to ${input.row.week_end}.`,
+      `Generated ${provider} podcast for ${input.row.week_start} to ${input.row.week_end} with ${cast.label}.`,
     );
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }
 }
 
-async function synthesizeLine(input: {
+async function synthesizeGeminiPodcast(input: {
+  apiKey: string;
+  cast: PodcastHostCast;
+  script: string;
+  outputPath: string;
+}) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": input.apiKey,
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text:
+                  "Read this as a natural two-host weekly technology podcast. " +
+                  "Use the speaker labels only to assign voices; do not read the labels aloud. " +
+                  "Keep the tone conversational, source-grounded, lightly skeptical, and paced like hosts thinking together.\n\n" +
+                  input.script,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            multiSpeakerVoiceConfig: {
+              speakerVoiceConfigs: [
+                {
+                  speaker: input.cast.hosts.primary.name,
+                  voiceConfig: {
+                    prebuiltVoiceConfig: {
+                      voiceName: input.cast.hosts.primary.geminiVoice,
+                    },
+                  },
+                },
+                {
+                  speaker: input.cast.hosts.secondary.name,
+                  voiceConfig: {
+                    prebuiltVoiceConfig: {
+                      voiceName: input.cast.hosts.secondary.geminiVoice,
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+        model: geminiModel,
+      }),
+    },
+  );
+  const body = (await response.json().catch(() => ({}))) as {
+    error?: { message?: string };
+    candidates?: Array<{
+      content?: { parts?: Array<{ inlineData?: { data?: string } }> };
+    }>;
+  };
+  const data = body.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  if (!response.ok || !data) {
+    const message = body.error?.message;
+    throw new Error(
+      `Gemini TTS failed with status ${response.status}${message ? `: ${message}` : ""}.`,
+    );
+  }
+
+  await writeFile(input.outputPath, createWav(Buffer.from(data, "base64")));
+}
+
+async function synthesizeQwenLine(input: {
   apiKey: string;
   voice: string;
   text: string;
@@ -214,6 +321,28 @@ async function synthesizeLine(input: {
   await writeFile(input.outputPath, Buffer.from(await audioResponse.arrayBuffer()));
 }
 
+function createWav(pcm: Buffer, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
+  const header = Buffer.alloc(44);
+  const byteRate = (sampleRate * channels * bitsPerSample) / 8;
+  const blockAlign = (channels * bitsPerSample) / 8;
+
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(pcm.length, 40);
+
+  return Buffer.concat([header, pcm]);
+}
+
 async function concatenateAudio(segmentPaths: string[], outputPath: string) {
   const args = [
     "-y",
@@ -231,12 +360,28 @@ async function concatenateAudio(segmentPaths: string[], outputPath: string) {
   await run("ffmpeg", args);
 }
 
+async function convertAudio(inputPath: string, outputPath: string) {
+  await run("ffmpeg", [
+    "-y",
+    "-i",
+    inputPath,
+    "-codec:a",
+    "libmp3lame",
+    "-b:a",
+    audioConfig.audioBitrate,
+    outputPath,
+  ]);
+}
+
 async function savePodcastAsset(input: {
   row: WeeklyDigestRow;
   script: string;
   storagePath: string;
   publicUrl: string;
   characterCount: number;
+  provider: string;
+  model: string;
+  estimatedCostUsd: number;
 }) {
   const sql = getSql();
   const assets = await sql<{ id: string }[]>`
@@ -254,8 +399,8 @@ async function savePodcastAsset(input: {
       ${input.row.creator_id},
       ${input.row.id},
       'podcast_audio',
-      'qwen',
-      ${ttsModel},
+      ${input.provider},
+      ${input.model},
       ${input.script.slice(0, 2000)},
       ${input.storagePath},
       ${input.publicUrl}
@@ -282,16 +427,26 @@ async function savePodcastAsset(input: {
       estimated_cost_usd
     )
     values (
-      'qwen',
-      ${ttsModel},
+      ${input.provider},
+      ${input.model},
       'podcast_audio',
       ${input.row.creator_id},
       ${input.row.id},
       ${Math.ceil(input.characterCount / 4)},
       0,
-      ${Number(((input.characterCount / 10000) * 0.115).toFixed(6))}
+      ${input.estimatedCostUsd}
     )
   `;
+}
+
+function estimateAudioCostUsd(provider: string, characterCount: number) {
+  if (provider === "qwen") {
+    return Number(((characterCount / 10000) * 0.115).toFixed(6));
+  }
+
+  const estimatedMinutes = characterCount / 900;
+  const perMinute = numberEnv("GEMINI_TTS_ESTIMATED_COST_PER_MINUTE", 0.015);
+  return Number((estimatedMinutes * perMinute).toFixed(6));
 }
 
 function run(command: string, args: string[]) {
@@ -308,6 +463,11 @@ function run(command: string, args: string[]) {
 function optionalEnv(name: string) {
   const value = process.env[name]?.trim();
   return value ? value : undefined;
+}
+
+function numberEnv(name: string, fallback: number) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
 main().catch((error) => {

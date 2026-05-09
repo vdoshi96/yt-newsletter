@@ -39,3 +39,7 @@ Updated creator discovery to run hourly, queue previously missed known videos, a
 Reworked weekly podcast scripts into longer two-host deep dives with configurable target length and TTS settings. Documented that NotebookLM remains a manual external option because there is no stable app API for automated generation.
 
 Added weekly calendar navigation for weekly digest and podcast pages, daily/weekly/podcast "Jump to current" controls, weekly story links to matching daily digest dates, source-note panel removal, skepticism wording cleanup, deeper explanation prompt instructions, follow-up overflow hardening, and weekly markdown artifact cleanup.
+
+## 2026-05-09 Gemini Podcast Hosts
+
+Switched the automated high-quality podcast path to Gemini Flash native multi-speaker TTS by default. Weekly casts now rotate between Puck/Kora and Achird/Silafat, and generated scripts open with host introductions and a little source-grounded podcast banter before moving into the digest analysis. The Qwen voice-design path remains available as an explicit provider.

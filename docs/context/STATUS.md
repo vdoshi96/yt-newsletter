@@ -21,7 +21,7 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 - Hourly creator discovery plus five-minute queue processing for fresher daily digests
 - Admin/manual refresh that discovers YouTube uploads and processes the queue
 - Long-form two-host weekly podcast scripts with configurable target length and TTS settings
-- Two-host Qwen-generated weekly podcast MP3s for stored weekly digests
+- Two-host weekly podcast MP3 generation with Gemini Flash rotating host casts; existing stored MP3s may include earlier Qwen-generated assets
 - Weekly digest and podcast calendar navigation
 - Prompt files and Zod validation
 - Focused tests for parsing, auth, schemas, progress, and date/video selection

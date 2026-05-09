@@ -34,11 +34,14 @@ const defaults = {
   KIMI_WEEKLY_MODEL: "moonshot-v1-32k",
   DEEPSEEK_WEEKLY_FALLBACK_MODEL: "deepseek-chat",
   GEMINI_VIDEO_MODEL: "gemini-2.5-flash",
+  GEMINI_TTS_MODEL: "gemini-2.5-flash-preview-tts",
+  GEMINI_TTS_ESTIMATED_COST_PER_MINUTE: "0.015",
   QWEN_IMAGE_MODEL: "wanx2.1-t2i-plus",
   QWEN_TTS_MODEL: "qwen3-tts-vd-2026-01-26",
   QWEN_VOICE_DESIGN_MODEL: "qwen-voice-design",
   QWEN_PODCAST_FEMALE_VOICE: "",
   QWEN_PODCAST_MALE_VOICE: "",
+  PODCAST_TTS_PROVIDER: "gemini_flash",
 };
 
 if (!existsSync(envPath)) {
