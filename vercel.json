@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/process-ingest",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/check-creators",
+      "schedule": "0 10 * * *"
+    }
+  ]
+}
