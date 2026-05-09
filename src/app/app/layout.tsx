@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppNav } from "@/components/app-nav";
 import { CreatorDropdown } from "@/components/creator-dropdown";
+import { logoutAction } from "@/app/logout/actions";
 import { requireUser } from "@/lib/auth/current-user";
 import { getCreatorsForUser } from "@/lib/creators";
 
@@ -30,9 +31,11 @@ export default async function ProtectedAppLayout({
             <div className="flex flex-wrap items-center gap-3">
               <CreatorDropdown creators={creators} />
               <span className="text-sm text-stone-600">{user.username}</span>
-              <Link className="btn-secondary h-10" href="/logout">
-                Logout
-              </Link>
+              <form action={logoutAction}>
+                <button className="btn-secondary h-10" type="submit">
+                  Logout
+                </button>
+              </form>
             </div>
           </div>
           <AppNav />
