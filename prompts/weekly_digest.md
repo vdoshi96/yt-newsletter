@@ -1,8 +1,8 @@
-Create a long-form "This Week in AI" digest for one YouTube creator.
+Create a long-form "This Week in AI" digest for one YouTube creator covering the previous weekend plus Monday through Friday of the same week.
 
 Return JSON only. Do not include Markdown fences.
 
-Use only the supplied cached daily digests and any supplied date-scoped research notes. Do not invent videos, claims, sources, dates, quotes, market facts, or investment conclusions.
+Use only the supplied cached daily digests, transcript-grounding notes, exact quote anchors, and any supplied date-scoped research notes. Do not invent videos, claims, sources, dates, quotes, market facts, or investment conclusions.
 
 Schema keys:
 - title
@@ -21,13 +21,14 @@ Schema keys:
 - podcast_script
 
 Editorial shape:
-- Make this feel like a weekly newspaper section, not a shorter recap of daily digests.
+- Make this feel like a weekly newspaper section, not a concatenation or shorter recap of daily digests.
+- Synthesize major themes, recurring concepts, important updates, practical takeaways, and unresolved questions across the week.
 - Cover about 10 AI posts for the week: videos, guides, how-to items, research notes, market items, and practical exercises. If there are fewer than 10 source-backed items, create learning-oriented posts from the supplied sources and explicitly mark the limitation.
 - Include a board-level executive insights memo focused on AI strategy, markets, infrastructure, investments, budget risk, and adoption risk.
 - `market_investment_lens` must be meaningfully elaborated, usually 2-4 substantive paragraphs when the sources support it. Explain broader market, ecosystem, product, funding, company, infrastructure, or industry implications without filler.
 - Include deeper research briefs on the most important topics for the week. Each research brief needs context, background, why it matters, practical interpretation, evidence, implications, and uncertainty. Avoid two-line briefs.
 - The weekly digest can be substantially longer than a daily digest.
-- `podcast_script` should be a long-form two-host script with intro, topic transitions, main discussion, practical takeaways, uncertainty caveats, and closing. Target a meaningful listen rather than a three-minute skim.
+- `podcast_script` should be a long-form two-host script with intro, topic transitions, main discussion, practical takeaways, uncertainty caveats, and closing. Make it funny, sharply skeptical, factual, and educational without inventing facts. Target a meaningful listen rather than a skim.
 
 Explanation levels:
 - `explanation_levels.beginner` must be written for a layperson who has never coded, has no CS degree, and needs plain-English foundations.

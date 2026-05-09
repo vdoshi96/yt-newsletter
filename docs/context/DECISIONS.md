@@ -18,7 +18,7 @@ Free YouTube transcripts are stored as `youtube_transcript_free`. Daily digests 
 
 ## 2026-05-09: Weekly Digest Archive
 
-The first Nate B. Jones baseline starts with four weekly editions because it covers 28 days. Weekly digests are not capped at four; every completed Sunday-to-Saturday week with daily digests can be stored and shown in the archive. Future weekly editions appear after the week completes, while larger backfills can create older archived weeks.
+The first Nate B. Jones baseline starts with four weekly editions because it covers the four most recent completed Saturday-to-Friday windows. Weekly digests are not capped at four; every completed Saturday-to-Friday week with daily digests can be stored and shown in the archive. Future weekly editions appear Saturday morning after the Friday close, while larger backfills can create older archived weeks.
 
 ## 2026-05-09: Freshness-Oriented Cron Split
 
@@ -26,8 +26,12 @@ Creator discovery runs hourly and queue processing runs every five minutes. Disc
 
 ## 2026-05-09: Podcast Quality Path
 
-The automated high-quality podcast path is `npm run podcasts:generate`, using a long-form two-host script and Gemini Flash native multi-speaker TTS by default. Host casts rotate weekly between Puck/Kora and Achird/Silafat. The older Qwen voice-designed segmented path remains available as an explicit provider. Inline weekly generation does not create default single-voice audio unless `PODCAST_TTS_PROVIDER=qwen_simple` is explicitly selected. NotebookLM is documented as manual because it does not expose a stable app API for this workflow.
+The automated high-quality podcast path is `npm run podcasts:generate`, using an approximately 30-minute two-host script and Gemini Flash native multi-speaker TTS by default. Host casts rotate weekly between Puck/Kora and Achird/Silafat. The older Qwen voice-designed segmented path remains available as an explicit provider. Podcast generation selects Sunday-ready weeks by default, stores provider/model/voice metadata, and marks audio failures without presenting placeholders as final audio. NotebookLM is documented as manual because it does not expose a stable app API for this workflow.
 
 ## 2026-05-09: Weekly Calendar Navigation
 
-Weekly digest and podcast pages use a `week=YYYY-MM-DD` query parameter that normalizes any selected date to the app's Sunday-to-Saturday week. Weekly story cards link to the corresponding daily digest date and rely on the daily empty state when no daily digest exists.
+Weekly digest and podcast pages use a `week=YYYY-MM-DD` query parameter that normalizes any selected date to the app's Saturday-to-Friday week. Weekly story cards link to the corresponding daily digest date and rely on the daily empty state when no daily digest exists.
+
+## 2026-05-09: Grounded Back-Catalog Regeneration
+
+Back-catalog regeneration is driven by `npm run backfill:grounded`. The command re-discovers configured creator catalogs, queues videos that are missing grounded daily digests, optionally force-regenerates trusted rows, and refreshes weekly digests after daily processing. It stores queryable transcript, digest, weekly, podcast, and asset metadata while preserving the hard rule that missing transcripts block final content instead of falling back to titles.

@@ -14,7 +14,7 @@ For the live starter baseline, run:
 npm run seed:baseline -- --process
 ```
 
-This queues Nate B. Jones main uploads from the past 28 calendar days and confirms the first four weekly editions. The weekly archive is not capped at four; completed Sunday-to-Saturday weeks remain stored. The baseline fetches deeper than 50 uploads and excludes Shorts-style or very short clips by default.
+This queues Nate B. Jones main uploads from the four most recent completed Saturday-through-Friday weeks and confirms the first four weekly editions. The weekly archive is not capped at four; completed Saturday-through-Friday weeks remain stored. The baseline fetches deeper than 50 uploads and excludes Shorts-style or very short clips by default.
 
 ## Ingestion
 
@@ -31,9 +31,11 @@ Run `npm run daily:refresh-follow-ups` to rebuild stored daily follow-up text fr
 
 Run `npm run daily:regenerate -- --date=YYYY-MM-DD` to safely regenerate stored daily digests after verifying/fetching transcript text. This command fails closed if transcript grounding checks do not pass.
 
+Run `npm run backfill:grounded -- --force` to re-discover configured creator back catalogs, queue transcript-grounded reprocessing, regenerate daily digests from verified transcript text, and refresh affected weekly digests. Use `--dry-run` before a large run.
+
 Run `npm run weekly:refresh-research` to refresh the starter weekly archive with the curated date-scoped research notes used for the baseline "This Week in AI" editions.
 
-Run `npm run podcasts:generate` to regenerate stored weekly podcast MP3s with the rotating two-host Gemini Flash path.
+Run `npm run podcasts:generate` to generate up to four Sunday-ready weekly podcast MP3s with the rotating two-host Gemini Flash path. Use `--force`, `--limit=N`, or `--week=YYYY-MM-DD` for backfills.
 
 ## Verification
 

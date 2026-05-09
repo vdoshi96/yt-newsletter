@@ -83,6 +83,35 @@ const researchBriefSchema = z.object({
   uncertainty: z.string().min(1),
 });
 
+const weeklyGroundingSchema = z.object({
+  grounded: z.boolean().default(false),
+  source: z.string().min(1).default("daily_digests"),
+  source_digest_count: z.number().int().nonnegative().default(0),
+  source_date_range: z
+    .object({
+      start: z.string().min(1),
+      end: z.string().min(1),
+    })
+    .optional(),
+  generated_at: z.string().min(1).optional(),
+  generation_model: z.string().min(1).optional(),
+  limitations: z.array(z.string()).default([]),
+});
+
+const podcastGenerationSchema = z.object({
+  status: z.string().min(1).default("pending"),
+  target_minutes: z.number().nonnegative().optional(),
+  words_per_minute: z.number().nonnegative().optional(),
+  word_count: z.number().int().nonnegative().optional(),
+  provider: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  cast_id: z.string().min(1).optional(),
+  generated_at: z.string().min(1).optional(),
+  voice_config: z.record(z.string(), z.unknown()).optional(),
+  source_references: z.array(z.record(z.string(), z.unknown())).default([]),
+  error_message: z.string().optional(),
+});
+
 const explanationLevelsSchema = z.object(
   Object.fromEntries(EXPLANATION_LEVEL_KEYS.map((level) => [level, z.string().min(1)])) as Record<
     (typeof EXPLANATION_LEVEL_KEYS)[number],
@@ -152,6 +181,12 @@ export const weeklyDigestSchema = z
     weekly_posts: z.array(weeklyPostSchema).default([]),
     research_briefs: z.array(researchBriefSchema).default([]),
     source_notes: z.array(weeklySourceNoteSchema).default([]),
+    weekly_grounding: weeklyGroundingSchema.default({
+      grounded: false,
+      source: "daily_digests",
+      source_digest_count: 0,
+      limitations: ["Weekly grounding metadata is missing; regenerate this week."],
+    }),
     ranked_topics: z
       .array(
         z.object({
@@ -165,6 +200,10 @@ export const weeklyDigestSchema = z
     what_to_do_next: z.array(z.string()).default([]),
     free_learning_plan: z.array(z.string()).default([]),
     podcast_script: z.string().min(1),
+    podcast_generation: podcastGenerationSchema.default({
+      status: "pending",
+      source_references: [],
+    }),
   })
   .transform((digest) => ({
     ...digest,

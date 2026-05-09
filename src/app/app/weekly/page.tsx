@@ -5,10 +5,7 @@ import { getCreatorsForUser } from "@/lib/creators";
 import { getSql } from "@/lib/db";
 import { weeklyDigestSchema, type WeeklyDigestPayload } from "@/lib/digests/schemas";
 import { ExplanationLevelPanel } from "@/components/explanation-level-panel";
-import {
-  getCurrentSundayWeekStart,
-  resolveSelectedWeekStart,
-} from "@/lib/weekly/navigation";
+import { getCurrentSundayWeekStart, resolveSelectedWeekStart } from "@/lib/weekly/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +17,11 @@ type WeeklyRow = {
   newsletter_markdown: string;
   ranked_topics: Array<{ topic: string; importance_score: number; why_it_matters: string }> | null;
   full_digest_json: unknown;
+  source_digest_count: number | null;
+  source_date_range: { start?: string; end?: string } | null;
+  grounding_status: string | null;
+  generation_model: string | null;
+  generated_at: string | null;
 };
 
 export default async function WeeklyPage({
@@ -46,8 +48,8 @@ export default async function WeeklyPage({
           Weekly digest archive
         </h2>
         <p className="mt-4 max-w-3xl text-slate-600">
-          The starter archive begins with four backfilled weeks. New completed
-          Sunday-to-Saturday editions are stored here as they are generated.
+          The starter archive begins with four completed backfilled weeks. New
+          Saturday-through-Friday editions are stored here after the Friday close.
         </p>
       </section>
 
@@ -110,6 +112,7 @@ function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creator
         {digest.week_start} to {digest.week_end}
       </p>
       <h3 className="mt-3 text-4xl font-black tracking-tight text-slate-950">{parsed.title}</h3>
+      <WeeklyMetadata digest={digest} parsed={parsed} />
       <div className="mt-6 grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
         <aside className="ink-panel">
           <h4 className="section-kicker">Ranked topics</h4>
@@ -122,6 +125,10 @@ function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creator
           </ol>
         </aside>
         <div className="space-y-6">
+          <section className="article-column">
+            <h4>What changed</h4>
+            <p>{parsed.what_changed}</p>
+          </section>
           <section className="article-column">
             <h4>Executive insights memo</h4>
             <p>{parsed.executive_insights_memo}</p>
@@ -199,7 +206,60 @@ function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creator
       </section>
 
       <NewsletterMarkdown markdown={parsed.newsletter_markdown} />
+
+      <section className="mt-6 ink-panel">
+        <h4 className="section-kicker">Grounded source notes</h4>
+        <ul className="mt-3 space-y-3 text-sm leading-6 text-slate-600">
+          {parsed.source_notes.length ? (
+            parsed.source_notes.map((note) => (
+              <li key={`${note.date}-${note.label}`}>
+                <strong>{note.date}:</strong> {note.label}. {note.note}
+              </li>
+            ))
+          ) : (
+            <li>No weekly source notes were stored for this edition.</li>
+          )}
+        </ul>
+      </section>
     </article>
+  );
+}
+
+function WeeklyMetadata({
+  digest,
+  parsed,
+}: {
+  digest: WeeklyRow;
+  parsed: WeeklyDigestPayload;
+}) {
+  const grounding = parsed.weekly_grounding;
+  const generatedAt = digest.generated_at ?? grounding.generated_at ?? "unknown";
+  const model = digest.generation_model ?? grounding.generation_model ?? "unknown";
+  const grounded = (digest.grounding_status ?? (grounding.grounded ? "grounded" : "pending")) === "grounded";
+  const rangeStart = digest.source_date_range?.start ?? grounding.source_date_range?.start ?? digest.week_start;
+  const rangeEnd = digest.source_date_range?.end ?? grounding.source_date_range?.end ?? digest.week_end;
+
+  return (
+    <dl className="mt-4 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 md:grid-cols-2 lg:grid-cols-4">
+      <div>
+        <dt className="font-bold text-slate-950">Generated</dt>
+        <dd>{generatedAt}</dd>
+      </div>
+      <div>
+        <dt className="font-bold text-slate-950">Source range</dt>
+        <dd>
+          {rangeStart} to {rangeEnd}
+        </dd>
+      </div>
+      <div>
+        <dt className="font-bold text-slate-950">Model</dt>
+        <dd>{model}</dd>
+      </div>
+      <div>
+        <dt className="font-bold text-slate-950">Grounding</dt>
+        <dd>{grounded ? "Grounded in daily digests" : "Needs regeneration"}</dd>
+      </div>
+    </dl>
   );
 }
 
@@ -209,7 +269,7 @@ function EmptyWeek({ title }: { title: string }) {
       <p className="section-kicker">Empty week</p>
       <h2 className="mt-3 text-4xl font-black tracking-tight text-slate-950">{title}</h2>
       <p className="mx-auto mt-3 max-w-xl text-slate-600">
-        Weekly editions appear after daily digests exist for a completed Sunday-to-Saturday week.
+        Weekly editions appear after daily digests exist for a completed Saturday-through-Friday week.
       </p>
     </section>
   );
@@ -272,7 +332,12 @@ async function getWeeklyDigests(userId: string, creatorId: string) {
       weekly_digests.week_end::text as week_end,
       weekly_digests.newsletter_markdown,
       weekly_digests.ranked_topics,
-      weekly_digests.full_digest_json
+      weekly_digests.full_digest_json,
+      weekly_digests.source_digest_count,
+      weekly_digests.source_date_range,
+      weekly_digests.grounding_status,
+      weekly_digests.generation_model,
+      weekly_digests.generated_at::text as generated_at
     from weekly_digests
     join user_creators on user_creators.creator_id = weekly_digests.creator_id
     where user_creators.user_id = ${userId}

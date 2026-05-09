@@ -72,15 +72,19 @@ export default async function AppHome() {
             <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-3">
-                  <CheckCircle2 aria-hidden className="mt-1 size-8 shrink-0 text-emerald-600" />
+                    <CheckCircle2 aria-hidden className="mt-1 size-8 shrink-0 text-emerald-600" />
                   <div>
-                    <h3 className="text-lg font-black text-slate-950">Latest job completed</h3>
+                    <h3 className="text-lg font-black text-slate-950">
+                      Latest job {latestJob.status.replace(/_/g, " ")}
+                    </h3>
                     <p className="mt-1 text-sm font-medium text-slate-700">
                       {latestJob.creator_title ?? "Creator"}
                     </p>
                   </div>
                 </div>
-                <p className="text-sm font-bold capitalize text-emerald-700">{latestJob.status}</p>
+                <p className={`text-sm font-bold capitalize ${statusTextClass(latestJob.status)}`}>
+                  {latestJob.status.replace(/_/g, " ")}
+                </p>
               </div>
               <div className="mt-4 flex items-center gap-3">
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
@@ -115,8 +119,9 @@ export default async function AppHome() {
           <h3 className="section-kicker">Starter creator</h3>
           <p className="mt-2 text-2xl font-black text-slate-950">Nate B. Jones</p>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Seeded as the first creator. The baseline run queues the past 28 days of
-            videos, starts with four weekly editions, and keeps future weeks as an archive.
+            Seeded as the first creator. The baseline run queues the four most recent
+            completed Saturday-through-Friday weeks, starts with four weekly editions,
+            and keeps future weeks as an archive.
           </p>
           <Link className="mt-5 inline-flex btn-secondary" href="/app/creators">
             Start a backfill
@@ -128,7 +133,8 @@ export default async function AppHome() {
           <p className="mt-2 text-2xl font-black text-slate-950">Source-grounded editions</p>
           <p className="mt-3 text-sm leading-6 text-slate-600">
             Daily and weekly views preserve the same records while giving you controls for
-            dates, weeks, explanation depth, podcast scripts, and operational refreshes.
+            dates, Saturday-through-Friday weeks, explanation depth, podcast scripts, and
+            operational refreshes.
           </p>
           <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
             <div
@@ -295,9 +301,11 @@ function RecentActivity({ activity }: { activity: ActivityRow[] }) {
                     {item.detail ?? "Stored update"}
                   </td>
                   <td className="py-3">
-                    <span className="inline-flex items-center gap-1 whitespace-nowrap font-bold capitalize text-emerald-700">
+                    <span
+                      className={`inline-flex items-center gap-1 whitespace-nowrap font-bold capitalize ${statusTextClass(item.status)}`}
+                    >
                       <CheckCircle2 aria-hidden className="size-4" />
-                      {item.status}
+                      {item.status.replace(/_/g, " ")}
                     </span>
                   </td>
                 </tr>
@@ -425,4 +433,12 @@ function formatCreatorTitle(title: string | null) {
   if (!title) return "Creator";
   const label = title.includes("|") ? title.split("|").at(-1)?.trim() ?? title : title;
   return label.replace("Nate B Jones", "Nate B. Jones");
+}
+
+function statusTextClass(status: string) {
+  if (status === "failed") return "text-red-700";
+  if (status === "waiting_for_transcript" || status === "processing" || status === "queued") {
+    return "text-amber-700";
+  }
+  return "text-emerald-700";
 }

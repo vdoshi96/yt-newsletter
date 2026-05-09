@@ -7,7 +7,10 @@ import {
   formatTwoHostPodcastScript,
   getPodcastCastForWeek,
 } from "@/lib/podcasts/two-host";
-import { getPodcastAudioConfig } from "@/lib/podcasts/config";
+import {
+  getPodcastAudioConfig,
+  getPodcastScriptConfig,
+} from "@/lib/podcasts/config";
 import { uploadGeneratedAsset } from "@/lib/supabase/storage";
 import {
   getSundayToSaturdayWeekRange,
@@ -104,26 +107,54 @@ export async function ensureWeeklyDigestForRange(input: {
     weekEnd,
     sourceText,
     prompt,
+    sourceDigestCount: daily.length,
   });
+  const cast = getPodcastCastForWeek(weekStart);
+  const scriptConfig = getPodcastScriptConfig();
+  const podcastScript = formatTwoHostPodcastScript(
+    buildTwoHostPodcastLines(generatedPayload, scriptConfig, cast),
+  );
   const payload = {
     ...generatedPayload,
-    podcast_script: formatTwoHostPodcastScript(
-      buildTwoHostPodcastLines(generatedPayload, undefined, getPodcastCastForWeek(weekStart)),
-    ),
+    podcast_script: podcastScript,
+    podcast_generation: {
+      ...generatedPayload.podcast_generation,
+      status: "script_generated",
+      target_minutes: scriptConfig.targetMinutes,
+      words_per_minute: scriptConfig.wordsPerMinute,
+      word_count: countWords(podcastScript),
+      cast_id: cast.id,
+      generated_at: new Date().toISOString(),
+      source_references: generatedPayload.source_notes.map((note) => ({
+        date: note.date,
+        label: note.label,
+        url: note.url,
+      })),
+    },
   };
+  const weeklyGrounding = payload.weekly_grounding;
 
   if (existing[0]) {
     await sql`
       update weekly_digests
       set
         week_end = ${weekEnd},
+        source_digest_count = ${weeklyGrounding.source_digest_count},
+        source_date_range = ${sql.json(toJsonParameter(weeklyGrounding.source_date_range ?? { start: weekStart, end: weekEnd }))},
+        grounding_status = ${weeklyGrounding.grounded ? "grounded" : "pending"},
+        generation_model = ${weeklyGrounding.generation_model ?? null},
+        generated_at = ${weeklyGrounding.generated_at ?? null},
+        processing_status = 'digest_generated',
+        podcast_status = coalesce(nullif(podcast_status, 'failed'), 'pending'),
+        podcast_generation_metadata = ${sql.json(toJsonParameter(payload.podcast_generation))},
+        source_references = ${sql.json(toJsonParameter(payload.source_notes))},
         title = ${payload.title},
         newsletter_markdown = ${payload.newsletter_markdown},
-        ranked_topics = ${sql.json(payload.ranked_topics)},
+        ranked_topics = ${sql.json(toJsonParameter(payload.ranked_topics))},
         what_changed = ${payload.what_changed},
-        what_to_do_next = ${sql.json(payload.what_to_do_next)},
+        what_to_do_next = ${sql.json(toJsonParameter(payload.what_to_do_next))},
         podcast_script = ${payload.podcast_script},
-        full_digest_json = ${sql.json(payload)},
+        full_digest_json = ${sql.json(toJsonParameter(payload))},
         updated_at = now()
       where id = ${existing[0].id}
     `;
@@ -135,6 +166,15 @@ export async function ensureWeeklyDigestForRange(input: {
       creator_id,
       week_start,
       week_end,
+      source_digest_count,
+      source_date_range,
+      grounding_status,
+      generation_model,
+      generated_at,
+      processing_status,
+      podcast_status,
+      podcast_generation_metadata,
+      source_references,
       title,
       newsletter_markdown,
       ranked_topics,
@@ -147,13 +187,22 @@ export async function ensureWeeklyDigestForRange(input: {
       ${input.creatorId},
       ${weekStart},
       ${weekEnd},
+      ${weeklyGrounding.source_digest_count},
+      ${sql.json(toJsonParameter(weeklyGrounding.source_date_range ?? { start: weekStart, end: weekEnd }))},
+      ${weeklyGrounding.grounded ? "grounded" : "pending"},
+      ${weeklyGrounding.generation_model ?? null},
+      ${weeklyGrounding.generated_at ?? null},
+      'digest_generated',
+      'pending',
+      ${sql.json(toJsonParameter(payload.podcast_generation))},
+      ${sql.json(toJsonParameter(payload.source_notes))},
       ${payload.title},
       ${payload.newsletter_markdown},
-      ${sql.json(payload.ranked_topics)},
+      ${sql.json(toJsonParameter(payload.ranked_topics))},
       ${payload.what_changed},
-      ${sql.json(payload.what_to_do_next)},
+      ${sql.json(toJsonParameter(payload.what_to_do_next))},
       ${payload.podcast_script},
-      ${sql.json(payload)}
+      ${sql.json(toJsonParameter(payload))}
     )
     on conflict (creator_id, week_start) do nothing
     returning id
@@ -246,4 +295,12 @@ async function maybeGeneratePodcastAudio(input: {
     where id = ${input.weeklyDigestId}
   `;
   return assets[0].id;
+}
+
+function countWords(text: string) {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+function toJsonParameter(value: unknown) {
+  return JSON.parse(JSON.stringify(value));
 }

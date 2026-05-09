@@ -82,11 +82,11 @@ async function ensureBaselineWeekDigest(
         week_end = ${window.weekEnd},
         title = ${payload.title},
         newsletter_markdown = ${payload.newsletter_markdown},
-        ranked_topics = ${sql.json(payload.ranked_topics)},
+        ranked_topics = ${sql.json(toJsonParameter(payload.ranked_topics))},
         what_changed = ${payload.what_changed},
-        what_to_do_next = ${sql.json(payload.what_to_do_next)},
+        what_to_do_next = ${sql.json(toJsonParameter(payload.what_to_do_next))},
         podcast_script = ${payload.podcast_script},
-        full_digest_json = ${sql.json(payload)},
+        full_digest_json = ${sql.json(toJsonParameter(payload))},
         updated_at = now()
       where id = ${existingId}
     `;
@@ -112,11 +112,11 @@ async function ensureBaselineWeekDigest(
       ${window.weekEnd},
       ${payload.title},
       ${payload.newsletter_markdown},
-      ${sql.json(payload.ranked_topics)},
+      ${sql.json(toJsonParameter(payload.ranked_topics))},
       ${payload.what_changed},
-      ${sql.json(payload.what_to_do_next)},
+      ${sql.json(toJsonParameter(payload.what_to_do_next))},
       ${payload.podcast_script},
-      ${sql.json(payload)}
+      ${sql.json(toJsonParameter(payload))}
     )
     returning id
   `;
@@ -137,6 +137,7 @@ async function generateWeeklyFromDailyDigests(
     weekEnd: window.weekEnd,
     sourceText,
     prompt,
+    sourceDigestCount: sourceDigests.length,
   });
 }
 
@@ -177,4 +178,8 @@ function createEmptyWeekPayload(window: BaselineWeekWindow) {
     podcast_script:
       "This baseline week does not have source-backed podcast material yet because no daily digests were available.",
   };
+}
+
+function toJsonParameter(value: unknown) {
+  return JSON.parse(JSON.stringify(value));
 }

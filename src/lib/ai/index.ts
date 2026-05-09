@@ -89,6 +89,7 @@ export async function generateWeeklyDigestPayload(input: {
   weekEnd: string;
   sourceText: string;
   prompt: string;
+  sourceDigestCount?: number;
 }) {
   const messages: ChatMessage[] = [
     {
@@ -123,7 +124,22 @@ export async function generateWeeklyDigestPayload(input: {
         },
         result,
       );
-      return weeklyDigestSchema.parse(parseJsonFromModel(result.text));
+      const generationTimestamp = new Date().toISOString();
+      const parsed = weeklyDigestSchema.parse({
+        ...parseJsonFromModel<Record<string, unknown>>(result.text),
+        weekly_grounding: undefined,
+        podcast_generation: undefined,
+      });
+      return weeklyDigestSchema.parse({
+        ...parsed,
+        weekly_grounding: buildWeeklyGroundingMetadata({
+          weekStart: input.weekStart,
+          weekEnd: input.weekEnd,
+          sourceDigestCount: input.sourceDigestCount,
+          generationTimestamp,
+          generationModel: `${option.provider}:${option.model}`,
+        }),
+      });
     } catch (error) {
       console.warn(`Weekly digest provider failed: ${(error as Error).message}`);
     }
@@ -192,6 +208,16 @@ export async function generateWeeklyDigestPayload(input: {
       label: fallbackTitles[index] ?? `Daily digest ${index + 1}`,
       note: "Cached daily digest used as fallback source context.",
     })),
+    weekly_grounding: buildWeeklyGroundingMetadata({
+      weekStart: input.weekStart,
+      weekEnd: input.weekEnd,
+      sourceDigestCount: input.sourceDigestCount ?? fallbackDates.length,
+      generationTimestamp: new Date().toISOString(),
+      generationModel: "local:fallback",
+      limitations: [
+        "Configured weekly providers returned invalid output, so this fallback only summarizes cached daily digest text.",
+      ],
+    }),
     explanation_levels: {
       beginner:
         "This week is summarized from the saved daily digests only. The app is not adding outside claims; it is grouping the creator's covered ideas into a simpler recap.",
@@ -211,4 +237,30 @@ export async function generateWeeklyDigestPayload(input: {
     free_learning_plan: ["Use free docs and official examples before optional paid material."],
     podcast_script: "This week's audio script is unavailable until AI providers are configured.",
   });
+}
+
+function buildWeeklyGroundingMetadata(input: {
+  weekStart: string;
+  weekEnd: string;
+  sourceDigestCount?: number;
+  generationTimestamp: string;
+  generationModel: string;
+  limitations?: string[];
+}) {
+  return {
+    grounded: (input.sourceDigestCount ?? 0) > 0,
+    source: "daily_digests",
+    source_digest_count: input.sourceDigestCount ?? 0,
+    source_date_range: {
+      start: input.weekStart,
+      end: input.weekEnd,
+    },
+    generated_at: input.generationTimestamp,
+    generation_model: input.generationModel,
+    limitations:
+      input.limitations ??
+      [
+        "Weekly synthesis is grounded in regenerated daily digests and their transcript-grounded source notes.",
+      ],
+  };
 }

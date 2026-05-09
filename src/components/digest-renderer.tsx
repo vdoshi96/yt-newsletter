@@ -124,11 +124,23 @@ function ConceptsToLearn({ digest }: { digest: DailyDigestPayload }) {
 
 function TranscriptGrounding({ digest }: { digest: DailyDigestPayload }) {
   const grounding = digest.transcript_grounding;
+  const isGrounded =
+    grounding.transcript_source === "youtube_transcript_free" &&
+    grounding.transcript_length > 0 &&
+    grounding.generation_timestamp !== "unknown";
 
   return (
-    <section className="ink-panel">
+    <section
+      className={`ink-panel ${
+        isGrounded ? "border-emerald-200 bg-emerald-50/30" : "border-amber-300 bg-amber-50/60"
+      }`}
+    >
       <h2 className="section-kicker">Transcript grounding</h2>
       <dl className="mt-3 grid gap-3 text-sm leading-6 text-slate-600">
+        <div>
+          <dt className="font-bold text-slate-950">Grounding status</dt>
+          <dd>{isGrounded ? "Grounded in verified transcript" : "Needs regeneration"}</dd>
+        </div>
         <div>
           <dt className="font-bold text-slate-950">Source</dt>
           <dd>{grounding.transcript_source}</dd>
@@ -145,6 +157,12 @@ function TranscriptGrounding({ digest }: { digest: DailyDigestPayload }) {
           <dt className="font-bold text-slate-950">Generated</dt>
           <dd>{grounding.generation_timestamp}</dd>
         </div>
+        {grounding.transcript_recorded_at ? (
+          <div>
+            <dt className="font-bold text-slate-950">Transcript captured</dt>
+            <dd>{grounding.transcript_recorded_at}</dd>
+          </div>
+        ) : null}
         {grounding.generation_model ? (
           <div>
             <dt className="font-bold text-slate-950">Model</dt>

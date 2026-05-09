@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { generateDailyDigestPayload } from "@/lib/ai";
 import { booleanEnv, numberEnv } from "@/lib/config";
 import { getSql } from "@/lib/db";
@@ -13,7 +14,7 @@ import { loadPrompt } from "@/lib/prompts";
 import { fetchFreeTranscript } from "@/lib/youtube/transcripts";
 import { ensureCompletedWeeklyDigestsForCreator } from "@/lib/weekly/generate";
 
-type QueueItem = {
+export type QueueItem = {
   item_id: string;
   job_id: string;
   creator_id: string;
@@ -27,7 +28,14 @@ type QueueItem = {
 const RETRY_MAX_ATTEMPTS = numberEnv("INGEST_ITEM_MAX_RETRIES", 5);
 const RETRY_DELAY_SECONDS = numberEnv("INGEST_ITEM_RETRY_DELAY_SECONDS", 3600);
 
-export async function processIngestQueue(limit = numberEnv("MAX_VIDEOS_PROCESSED_PER_CRON_RUN", 3)) {
+export type ProcessIngestQueueOptions = {
+  forceRegenerateDaily?: boolean;
+};
+
+export async function processIngestQueue(
+  limit = numberEnv("MAX_VIDEOS_PROCESSED_PER_CRON_RUN", 3),
+  options: ProcessIngestQueueOptions = {},
+) {
   const sql = getSql();
   logIngest("queue-scan-started", { limit });
   const items = await sql<QueueItem[]>`
@@ -72,7 +80,7 @@ export async function processIngestQueue(limit = numberEnv("MAX_VIDEOS_PROCESSED
   let processed = 0;
   const touchedCreators = new Set<string>();
   for (const item of items) {
-    await processQueueItem(item);
+    await processQueueItem(item, options);
     touchedCreators.add(item.creator_id);
     processed += 1;
   }
@@ -119,7 +127,7 @@ async function countOpenItemsForCreator(creatorId: string) {
   return rows[0]?.count ?? 0;
 }
 
-async function processQueueItem(item: QueueItem) {
+async function processQueueItem(item: QueueItem, options: ProcessIngestQueueOptions = {}) {
   const sql = getSql();
   logIngest("item-started", {
     itemId: item.item_id,
@@ -134,7 +142,17 @@ async function processQueueItem(item: QueueItem) {
   `;
   await sql`
     update ingest_job_items
-    set status = 'processing', started_at = now(), next_retry_at = null, updated_at = now()
+    set
+      status = 'processing',
+      processing_status = 'pending',
+      validation_log = ${sql.json({
+        event: "processing_started",
+        youtubeVideoId: item.youtube_video_id,
+        timestamp: new Date().toISOString(),
+      })},
+      started_at = coalesce(started_at, now()),
+      next_retry_at = null,
+      updated_at = now()
     where id = ${item.item_id}
   `;
 
@@ -147,7 +165,17 @@ async function processQueueItem(item: QueueItem) {
       });
       await sql`
         update ingest_job_items
-        set status = 'waiting_for_transcript', error_message = 'Transcript missing; waiting for retry window.', updated_at = now()
+        set
+          status = 'waiting_for_transcript',
+          processing_status = 'transcript_missing',
+          error_message = 'Transcript missing; waiting for retry window.',
+          validation_log = ${sql.json({
+            sourceAvailable: false,
+            transcriptLength: 0,
+            groundingStatus: "blocked",
+            timestamp: new Date().toISOString(),
+          })},
+          updated_at = now()
         where id = ${item.item_id}
       `;
       await sql`
@@ -166,15 +194,33 @@ async function processQueueItem(item: QueueItem) {
     `;
 
     const completedTranscript = transcript as DailyDigestTranscriptRecord;
+    const transcriptLength = completedTranscript.transcript_text?.trim().length ?? 0;
+    await sql`
+      update ingest_job_items
+      set
+        processing_status = 'transcript_ready',
+        validation_log = ${sql.json({
+          sourceAvailable: true,
+          transcriptLength,
+          transcriptSource: completedTranscript.source,
+          groundingStatus: "ready",
+          timestamp: new Date().toISOString(),
+        })},
+        updated_at = now()
+      where id = ${item.item_id}
+    `;
     logIngest("summarization-started", {
       itemId: item.item_id,
       videoId: item.video_id,
       source: completedTranscript.source,
+      transcriptLength,
     });
-    await ensureDailyDigest(item, completedTranscript);
+    await ensureDailyDigest(item, completedTranscript, {
+      forceRegenerate: options.forceRegenerateDaily,
+    });
     await sql`
       update ingest_job_items
-      set status = 'completed', completed_at = now(), updated_at = now()
+      set status = 'completed', processing_status = 'digest_generated', completed_at = now(), updated_at = now()
       where id = ${item.item_id}
     `;
     logIngest("item-completed", {
@@ -241,7 +287,7 @@ async function processQueueItem(item: QueueItem) {
   }
 }
 
-async function ensureTranscript(item: QueueItem) {
+export async function ensureTranscript(item: QueueItem) {
   const sql = getSql();
   const existing = await sql<DailyDigestTranscriptRecord[]>`
     select
@@ -264,9 +310,36 @@ async function ensureTranscript(item: QueueItem) {
   `;
 
   if (existing[0]) {
+    const transcriptLength = existing[0].transcript_text?.trim().length ?? 0;
+    const transcriptId = existing[0].id;
+    if (transcriptId) {
+      await sql`
+        update transcripts
+        set
+          transcript_length = coalesce(transcript_length, ${transcriptLength}),
+          source_hash = coalesce(source_hash, ${hashSourceText(existing[0].transcript_text ?? "")}),
+          extraction_metadata = coalesce(
+            extraction_metadata,
+            ${sql.json({
+              api: "youtube-transcript",
+              source: existing[0].source,
+              youtubeVideoId: item.youtube_video_id,
+              segmentCount: existing[0].timed_segments?.length ?? 0,
+              transcriptLength,
+              reusedExisting: true,
+            })}
+          ),
+          extracted_at = coalesce(extracted_at, created_at, now()),
+          processing_status = 'transcript_ready',
+          updated_at = now()
+        where id = ${transcriptId}
+      `;
+    }
     logIngest("transcript-existing", {
       videoId: item.video_id,
       source: existing[0].source,
+      characters: transcriptLength,
+      sourceAvailable: true,
     });
     return existing[0];
   }
@@ -277,6 +350,15 @@ async function ensureTranscript(item: QueueItem) {
   });
   const freeTranscript = await fetchFreeTranscript(item.youtube_video_id);
   if (freeTranscript.status === "completed") {
+    const transcriptLength = freeTranscript.transcript_text.length;
+    const extractionMetadata = {
+      api: "youtube-transcript",
+      source: freeTranscript.source,
+      youtubeVideoId: item.youtube_video_id,
+      segmentCount: freeTranscript.timed_segments.length,
+      transcriptLength,
+      fetchedAt: new Date().toISOString(),
+    };
     const rows = await sql<DailyDigestTranscriptRecord[]>`
       insert into transcripts (
         video_id,
@@ -285,6 +367,11 @@ async function ensureTranscript(item: QueueItem) {
         transcript_text,
         timed_segments,
         derived_notes,
+        transcript_length,
+        source_hash,
+        extraction_metadata,
+        extracted_at,
+        processing_status,
         needs_retry,
         retry_after
       )
@@ -295,6 +382,11 @@ async function ensureTranscript(item: QueueItem) {
         ${freeTranscript.transcript_text},
         ${sql.json(freeTranscript.timed_segments)},
         null,
+        ${transcriptLength},
+        ${hashSourceText(freeTranscript.transcript_text)},
+        ${sql.json(extractionMetadata)},
+        now(),
+        'transcript_ready',
         false,
         null
       )
@@ -320,16 +412,30 @@ async function ensureTranscript(item: QueueItem) {
     logIngest("transcript-fetch-completed", {
       videoId: item.video_id,
       source: freeTranscript.source,
-      characters: freeTranscript.transcript_text.length,
+      characters: transcriptLength,
+      sourceAvailable: true,
+      groundingStatus: "transcript_ready",
     });
     return rows[0];
   }
 
+  const missingMetadata = {
+    api: "youtube-transcript",
+    source: freeTranscript.source,
+    youtubeVideoId: item.youtube_video_id,
+    sourceAvailable: false,
+    transcriptLength: 0,
+    fetchedAt: new Date().toISOString(),
+  };
   await sql`
     insert into transcripts (
       video_id,
       source,
       status,
+      transcript_length,
+      extraction_metadata,
+      extracted_at,
+      processing_status,
       needs_retry,
       retry_after
     )
@@ -337,6 +443,10 @@ async function ensureTranscript(item: QueueItem) {
       ${item.video_id},
       ${freeTranscript.source},
       'missing',
+      0,
+      ${sql.json(missingMetadata)},
+      now(),
+      'transcript_missing',
       true,
       ${freeTranscript.retry_after}
     )
@@ -349,19 +459,22 @@ async function ensureTranscript(item: QueueItem) {
   logIngest("transcript-missing-recorded", {
     videoId: item.video_id,
     retryAfter: freeTranscript.retry_after,
+    sourceAvailable: false,
+    transcriptLength: 0,
   });
   return freeTranscript;
 }
 
-async function ensureDailyDigest(
+export async function ensureDailyDigest(
   item: QueueItem,
   transcript: DailyDigestTranscriptRecord,
+  options: { forceRegenerate?: boolean } = {},
 ) {
   const sql = getSql();
   const existing = await sql<{ id: string }[]>`
     select id from daily_digests where video_id = ${item.video_id} limit 1
   `;
-  if (existing[0]) {
+  if (existing[0] && !options.forceRegenerate) {
     logIngest("daily-digest-existing", {
       videoId: item.video_id,
       digestId: existing[0].id,
@@ -398,12 +511,27 @@ async function ensureDailyDigest(
       previous: previousDigests,
     }),
   };
+  const grounding = payloadWithFollowUp.transcript_grounding;
+  const sourceReferences = {
+    transcriptId: transcript.id ?? null,
+    transcriptSource: grounding.transcript_source,
+    transcriptLength: grounding.transcript_length,
+    keyExcerpts: grounding.key_excerpts,
+  };
 
   const rows = await sql<{ id: string }[]>`
     insert into daily_digests (
       creator_id,
       video_id,
       digest_date,
+      transcript_id,
+      transcript_source,
+      transcript_length,
+      grounding_status,
+      generation_model,
+      generated_at,
+      processing_status,
+      source_references,
       layout_type,
       importance_score,
       title,
@@ -423,6 +551,14 @@ async function ensureDailyDigest(
       ${item.creator_id},
       ${item.video_id},
       ${digestDate},
+      ${transcript.id ?? null},
+      ${grounding.transcript_source},
+      ${grounding.transcript_length},
+      'grounded',
+      ${grounding.generation_model ?? null},
+      ${grounding.generation_timestamp},
+      'digest_generated',
+      ${sql.json(sourceReferences)},
       ${payloadWithFollowUp.layout_type},
       0.5,
       ${payloadWithFollowUp.title},
@@ -439,9 +575,48 @@ async function ensureDailyDigest(
       ${sql.json(toJsonParameter(payloadWithFollowUp))}
     )
     on conflict (video_id) do update set
-      updated_at = daily_digests.updated_at
+      digest_date = excluded.digest_date,
+      transcript_id = excluded.transcript_id,
+      transcript_source = excluded.transcript_source,
+      transcript_length = excluded.transcript_length,
+      grounding_status = excluded.grounding_status,
+      generation_model = excluded.generation_model,
+      generated_at = excluded.generated_at,
+      processing_status = excluded.processing_status,
+      source_references = excluded.source_references,
+      layout_type = excluded.layout_type,
+      importance_score = excluded.importance_score,
+      title = excluded.title,
+      dek = excluded.dek,
+      front_page_summary = excluded.front_page_summary,
+      plain_english_explanation = excluded.plain_english_explanation,
+      why_it_matters = excluded.why_it_matters,
+      what_to_do_next = excluded.what_to_do_next,
+      free_learning_plan = excluded.free_learning_plan,
+      glossary = excluded.glossary,
+      topic_links = excluded.topic_links,
+      skepticism_notes = excluded.skepticism_notes,
+      source_notes = excluded.source_notes,
+      full_digest_json = excluded.full_digest_json,
+      updated_at = now()
     returning id
   `;
+  await sql`
+    update transcripts
+    set status = 'failed', needs_retry = false, retry_after = null, processing_status = 'failed', updated_at = now()
+    where video_id = ${item.video_id}
+      and source <> 'youtube_transcript_free'
+      and status = 'completed'
+  `;
+  logIngest("daily-digest-grounding-validated", {
+    creatorId: item.creator_id,
+    videoId: item.video_id,
+    digestDate,
+    transcriptSource: grounding.transcript_source,
+    transcriptLength: grounding.transcript_length,
+    groundingStatus: "grounded",
+    generationModel: grounding.generation_model ?? null,
+  });
   logIngest("daily-digest-db-write-completed", {
     creatorId: item.creator_id,
     videoId: item.video_id,
@@ -506,6 +681,10 @@ function formatPreviousDailyContext(digestDate: string, previous: DailyFollowUpD
 
 function toJsonParameter(value: unknown) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function hashSourceText(text: string) {
+  return crypto.createHash("sha256").update(text).digest("hex");
 }
 
 async function syncJobCounts(jobId: string) {

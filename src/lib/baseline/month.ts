@@ -8,7 +8,7 @@ export type BaselineWeekWindow = {
 };
 
 export function getPastMonthBaselineWindow(now = new Date()) {
-  const end = utcDateOnly(now);
+  const end = mostRecentCompletedFriday(now);
   const start = new Date(end);
   start.setUTCDate(start.getUTCDate() - (BASELINE_DAYS - 1));
 
@@ -61,6 +61,14 @@ export function isBaselineMainVideo(video: {
 
 function utcDateOnly(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function mostRecentCompletedFriday(date: Date) {
+  const current = utcDateOnly(date);
+  const day = current.getUTCDay();
+  const daysSinceFriday = (day - 5 + 7) % 7 || 7;
+  current.setUTCDate(current.getUTCDate() - daysSinceFriday);
+  return current;
 }
 
 function toDateString(date: Date) {

@@ -1,4 +1,5 @@
 import "./load-env";
+import crypto from "node:crypto";
 import { generateDailyDigestPayload } from "@/lib/ai";
 import { closeSql, getSql } from "@/lib/db";
 import { buildDailyFollowUp, type DailyFollowUpDigest } from "@/lib/digests/follow-up";
@@ -76,11 +77,12 @@ async function main() {
         previous,
       }),
     };
+    const grounding = payloadWithFollowUp.transcript_grounding;
 
     await sql.begin(async (transaction) => {
       await transaction`
         update transcripts
-        set status = 'failed', needs_retry = false, retry_after = null, updated_at = now()
+        set status = 'failed', needs_retry = false, retry_after = null, processing_status = 'failed', updated_at = now()
         where video_id = ${row.video_id}
           and source <> 'youtube_transcript_free'
           and status = 'completed'
@@ -88,6 +90,19 @@ async function main() {
       await transaction`
         update daily_digests
         set
+          transcript_id = ${verifiedTranscript.id ?? null},
+          transcript_source = ${grounding.transcript_source},
+          transcript_length = ${grounding.transcript_length},
+          grounding_status = 'grounded',
+          generation_model = ${grounding.generation_model ?? null},
+          generated_at = ${grounding.generation_timestamp},
+          processing_status = 'digest_generated',
+          source_references = ${transaction.json({
+            transcriptId: verifiedTranscript.id ?? null,
+            transcriptSource: grounding.transcript_source,
+            transcriptLength: grounding.transcript_length,
+            keyExcerpts: grounding.key_excerpts,
+          })},
           layout_type = ${payloadWithFollowUp.layout_type},
           title = ${payloadWithFollowUp.title},
           dek = ${payloadWithFollowUp.dek},
@@ -157,7 +172,35 @@ async function ensureVerifiedTranscript(row: DigestRow) {
     order by created_at desc
     limit 1
   `;
-  if (existing[0]) return existing[0];
+  if (existing[0]) {
+    const transcriptLength = existing[0].transcript_text?.trim().length ?? 0;
+    const transcriptId = existing[0].id;
+    if (transcriptId) {
+      await sql`
+        update transcripts
+        set
+          transcript_length = coalesce(transcript_length, ${transcriptLength}),
+          source_hash = coalesce(source_hash, ${hashSourceText(existing[0].transcript_text ?? "")}),
+          extraction_metadata = coalesce(
+            extraction_metadata,
+            ${sql.json({
+              api: "youtube-transcript",
+              source: existing[0].source,
+              youtubeVideoId: row.youtube_video_id,
+              segmentCount: existing[0].timed_segments?.length ?? 0,
+              transcriptLength,
+              reusedExisting: true,
+              regeneration: true,
+            })}
+          ),
+          extracted_at = coalesce(extracted_at, created_at, now()),
+          processing_status = 'transcript_ready',
+          updated_at = now()
+        where id = ${transcriptId}
+      `;
+    }
+    return existing[0];
+  }
 
   const transcript = await fetchFreeTranscript(row.youtube_video_id);
   if (transcript.status !== "completed") {
@@ -174,6 +217,11 @@ async function ensureVerifiedTranscript(row: DigestRow) {
       transcript_text,
       timed_segments,
       derived_notes,
+      transcript_length,
+      source_hash,
+      extraction_metadata,
+      extracted_at,
+      processing_status,
       needs_retry,
       retry_after
     )
@@ -184,6 +232,19 @@ async function ensureVerifiedTranscript(row: DigestRow) {
       ${transcript.transcript_text},
       ${sql.json(transcript.timed_segments)},
       null,
+      ${transcript.transcript_text.length},
+      ${hashSourceText(transcript.transcript_text)},
+      ${sql.json({
+        api: "youtube-transcript",
+        source: transcript.source,
+        youtubeVideoId: row.youtube_video_id,
+        segmentCount: transcript.timed_segments.length,
+        transcriptLength: transcript.transcript_text.length,
+        fetchedAt: new Date().toISOString(),
+        regeneration: true,
+      })},
+      now(),
+      'transcript_ready',
       false,
       null
     )
@@ -230,6 +291,10 @@ async function getPreviousDailyDigests(creatorId: string, digestDate: string) {
 
 function toJsonParameter(value: unknown) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function hashSourceText(text: string) {
+  return crypto.createHash("sha256").update(text).digest("hex");
 }
 
 main()

@@ -14,14 +14,15 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 - Queue processor endpoints and manual runner
 - Daily digest UI
 - Weekly digest and podcast pages
-- One-month baseline flow for Nate B. Jones that starts with four weekly editions
-- Weekly digest archive behavior for all completed Sunday-to-Saturday weeks
+- Baseline flow for Nate B. Jones that starts with four completed weekly editions
+- Weekly digest archive behavior for completed Saturday-to-Friday weeks
 - Baseline video filtering that excludes Shorts-style and very short clips from the live starter data
 - Daily and weekly digest explanation levels: beginner, intermediate, and advanced
 - Hourly creator discovery plus five-minute queue processing for fresher daily digests
 - Admin/manual refresh that discovers YouTube uploads and processes the queue
-- Long-form two-host weekly podcast scripts with configurable target length and TTS settings
+- Approximately 30-minute two-host weekly podcast scripts with configurable target length and TTS settings
 - Two-host weekly podcast MP3 generation with Gemini Flash rotating host casts; existing stored MP3s may include earlier Qwen-generated assets
+- Grounded back-catalog regeneration command with force/dry-run controls and idempotent daily/weekly/podcast metadata
 - Weekly digest and podcast calendar navigation
 - Prompt files and Zod validation
 - Focused tests for parsing, auth, schemas, progress, and date/video selection
@@ -31,7 +32,7 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 
 Last known local checks:
 
-- `npm test`: passing, 47 tests
+- `npm test`: passing, 47+ tests
 - `npm run lint`: passing
 - `npx tsc --noEmit`: passing
 - `npm run build`: passing

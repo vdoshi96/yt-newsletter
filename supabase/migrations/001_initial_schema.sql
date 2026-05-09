@@ -198,6 +198,9 @@ create table if not exists assets (
 );
 
 alter table weekly_digests
+  drop constraint if exists weekly_digests_audio_asset_fk;
+
+alter table weekly_digests
   add constraint weekly_digests_audio_asset_fk
   foreign key (podcast_audio_asset_id) references assets(id) on delete set null;
 
@@ -215,13 +218,59 @@ create table if not exists model_usage (
   created_at timestamptz default now()
 );
 
+alter table transcripts
+  add column if not exists transcript_length integer,
+  add column if not exists source_hash text,
+  add column if not exists extraction_metadata jsonb,
+  add column if not exists extracted_at timestamptz,
+  add column if not exists processing_status text default 'pending';
+
+alter table ingest_job_items
+  add column if not exists processing_status text default 'pending',
+  add column if not exists validation_log jsonb;
+
+alter table daily_digests
+  add column if not exists transcript_id uuid references transcripts(id) on delete set null,
+  add column if not exists transcript_source text,
+  add column if not exists transcript_length integer,
+  add column if not exists grounding_status text default 'pending',
+  add column if not exists generation_model text,
+  add column if not exists generated_at timestamptz,
+  add column if not exists processing_status text default 'pending',
+  add column if not exists source_references jsonb;
+
+alter table weekly_digests
+  add column if not exists source_digest_count integer,
+  add column if not exists source_date_range jsonb,
+  add column if not exists grounding_status text default 'pending',
+  add column if not exists generation_model text,
+  add column if not exists generated_at timestamptz,
+  add column if not exists processing_status text default 'pending',
+  add column if not exists podcast_status text default 'pending',
+  add column if not exists podcast_generation_metadata jsonb,
+  add column if not exists podcast_generated_at timestamptz,
+  add column if not exists podcast_model text,
+  add column if not exists podcast_voice_config jsonb,
+  add column if not exists source_references jsonb;
+
+alter table assets
+  add column if not exists generation_status text default 'pending',
+  add column if not exists generation_metadata jsonb,
+  add column if not exists source_references jsonb;
+
 create index if not exists sessions_expires_at_idx on sessions (expires_at);
 create index if not exists login_attempts_username_created_idx on login_attempts (lower(username), created_at desc);
 create index if not exists videos_creator_published_idx on videos (creator_id, published_at desc);
 create index if not exists transcripts_video_status_idx on transcripts (video_id, status);
+create index if not exists transcripts_video_source_completed_idx
+  on transcripts (video_id, source)
+  where status = 'completed';
 create index if not exists ingest_job_items_status_idx on ingest_job_items (status, created_at);
+create index if not exists ingest_job_items_processing_status_idx on ingest_job_items (processing_status, created_at);
 create index if not exists daily_digests_creator_date_idx on daily_digests (creator_id, digest_date desc);
+create index if not exists daily_digests_grounding_status_idx on daily_digests (grounding_status, generated_at desc);
 create index if not exists weekly_digests_creator_week_idx on weekly_digests (creator_id, week_start desc);
+create index if not exists weekly_digests_podcast_status_idx on weekly_digests (podcast_status, podcast_generated_at desc);
 create index if not exists model_usage_created_idx on model_usage (created_at desc);
 
 drop trigger if exists set_app_users_updated_at on app_users;

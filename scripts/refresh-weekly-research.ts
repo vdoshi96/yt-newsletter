@@ -538,7 +538,7 @@ async function main() {
           what_changed = ${payload.what_changed},
           what_to_do_next = ${sql.json(payload.what_to_do_next)},
           podcast_script = ${payload.podcast_script},
-          full_digest_json = ${sql.json(payload)},
+          full_digest_json = ${sql.json(toJsonParameter(payload))},
           updated_at = now()
         where id = ${week.id}
       `;
@@ -772,6 +772,10 @@ function buildPodcastScript(
 function truncate(value: string, maxLength: number) {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength).trim()}...`;
+}
+
+function toJsonParameter(value: unknown) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 main().catch((error) => {
