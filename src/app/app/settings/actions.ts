@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/current-user";
-import { processIngestQueue } from "@/lib/processor";
+import { refreshCreatorsAndProcessQueue } from "@/lib/processor";
 import { startPastMonthBaselineForCreatorUrl } from "@/lib/creators";
 
 export async function runIngestNowAction() {
@@ -11,8 +11,8 @@ export async function runIngestNowAction() {
     redirect("/app/settings?error=Only%20admins%20can%20run%20the%20manual%20processor");
   }
 
-  const result = await processIngestQueue();
-  redirect(`/app/jobs?processed=${result.processed}`);
+  const result = await refreshCreatorsAndProcessQueue();
+  redirect(`/app/jobs?processed=${result.processed}&queued=${result.videosQueued}`);
 }
 
 export async function seedBaselineAction() {

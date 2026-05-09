@@ -24,13 +24,15 @@ Editorial shape:
 - Make this feel like a weekly newspaper section, not a shorter recap of daily digests.
 - Cover about 10 AI posts for the week: videos, guides, how-to items, research notes, market items, and practical exercises. If there are fewer than 10 source-backed items, create learning-oriented posts from the supplied sources and explicitly mark the limitation.
 - Include a board-level executive insights memo focused on AI strategy, markets, infrastructure, investments, budget risk, and adoption risk.
-- Include deeper research briefs on the most important topics for the week. Tie each brief to dated source notes or daily digest evidence.
+- `market_investment_lens` must be meaningfully elaborated, usually 2-4 substantive paragraphs when the sources support it. Explain broader market, ecosystem, product, funding, company, infrastructure, or industry implications without filler.
+- Include deeper research briefs on the most important topics for the week. Each research brief needs context, background, why it matters, practical interpretation, evidence, implications, and uncertainty. Avoid two-line briefs.
 - The weekly digest can be substantially longer than a daily digest.
+- `podcast_script` should be a long-form two-host script with intro, topic transitions, main discussion, practical takeaways, uncertainty caveats, and closing. Target a meaningful listen rather than a three-minute skim.
 
 Explanation levels:
 - `explanation_levels.beginner` must be written for a layperson who has never coded, has no CS degree, and needs plain-English foundations.
-- `explanation_levels.intermediate` should assume vague familiarity with AI tools and connect ideas to workflows, evaluation, cost, and practical adoption.
-- `explanation_levels.advanced` can discuss architecture, market structure, model limitations, deployment tradeoffs, and investment implications, but must not be more certain than the sources allow.
+- `explanation_levels.intermediate` should assume vague familiarity with AI tools and connect ideas to workflows, evaluation, cost, cause/effect, and practical adoption.
+- `explanation_levels.advanced` must be visibly deeper than intermediate and can discuss architecture, market structure, model limitations, deployment tradeoffs, and investment implications, but must not be more certain than the sources allow.
 - Pull the weekly explanation levels from the corresponding daily explanation levels when available.
 
 Rules:

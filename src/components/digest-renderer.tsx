@@ -45,7 +45,7 @@ export function DigestRenderer({ digest }: { digest: DailyDigestPayload }) {
         </section>
       </div>
 
-      <div className="mt-8 grid gap-6 md:grid-cols-3">
+      <div className="mt-8 grid gap-6 md:grid-cols-2">
         <section className="ink-panel">
           <h2 className="section-kicker">Terms to understand</h2>
           <dl className="space-y-3">
@@ -62,20 +62,6 @@ export function DigestRenderer({ digest }: { digest: DailyDigestPayload }) {
           </dl>
         </section>
         <DigestSection title="Free learning path" items={digest.free_learning_plan} />
-        <section className="ink-panel">
-          <h2 className="section-kicker">Source / timestamp notes</h2>
-          <ul className="space-y-3 text-sm leading-6 text-stone-700">
-            {digest.source_notes.length === 0 ? (
-              <li>No timestamped source notes available.</li>
-            ) : (
-              digest.source_notes.map((note, index) => (
-                <li key={`${note.timestamp ?? "note"}-${index}`}>
-                  <strong>{note.timestamp ?? "Source note"}:</strong> {note.note}
-                </li>
-              ))
-            )}
-          </ul>
-        </section>
       </div>
     </article>
   );

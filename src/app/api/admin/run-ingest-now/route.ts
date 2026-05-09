@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCronSecret } from "@/lib/api-auth";
-import { processIngestQueue } from "@/lib/processor";
+import { processIngestQueue, refreshCreatorsAndProcessQueue } from "@/lib/processor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,6 +10,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await processIngestQueue();
+  const shouldDiscover = request.nextUrl.searchParams.get("discover") !== "0";
+  const result = shouldDiscover
+    ? await refreshCreatorsAndProcessQueue()
+    : await processIngestQueue();
   return NextResponse.json(result);
 }

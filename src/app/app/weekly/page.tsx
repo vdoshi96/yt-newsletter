@@ -1,8 +1,13 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth/current-user";
 import { getCreatorsForUser } from "@/lib/creators";
 import { getSql } from "@/lib/db";
 import { weeklyDigestSchema, type WeeklyDigestPayload } from "@/lib/digests/schemas";
 import { ExplanationLevelPanel } from "@/components/explanation-level-panel";
+import {
+  getCurrentSundayWeekStart,
+  resolveSelectedWeekStart,
+} from "@/lib/weekly/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -19,13 +24,18 @@ type WeeklyRow = {
 export default async function WeeklyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ creatorId?: string }>;
+  searchParams: Promise<{ creatorId?: string; week?: string }>;
 }) {
   const user = await requireUser();
   const params = await searchParams;
   const creators = await getCreatorsForUser(user.id);
   const creatorId = params.creatorId ?? creators[0]?.id;
   const digests = creatorId ? await getWeeklyDigests(user.id, creatorId) : [];
+  const availableWeeks = digests.map((digest) => digest.week_start);
+  const selectedWeekStart = resolveSelectedWeekStart(params.week, availableWeeks);
+  const selectedDigest =
+    digests.find((digest) => digest.week_start === selectedWeekStart) ?? null;
+  const currentWeekStart = getCurrentSundayWeekStart();
 
   return (
     <div className="space-y-6">
@@ -38,20 +48,52 @@ export default async function WeeklyPage({
         </p>
       </section>
 
-      {digests.length === 0 ? (
+      {creatorId ? (
+        <section className="ink-panel">
+          <form method="get" className="grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
+            <input type="hidden" name="creatorId" value={creatorId} />
+            <label className="block text-sm font-bold text-stone-800">
+              Week
+              <input
+                className="mt-2 h-11 w-full rounded border border-stone-300 bg-white px-3 text-stone-950"
+                name="week"
+                type="date"
+                defaultValue={selectedWeekStart}
+                list="available-weekly-digest-weeks"
+              />
+              <datalist id="available-weekly-digest-weeks">
+                {availableWeeks.map((week) => (
+                  <option key={week} value={week} />
+                ))}
+              </datalist>
+            </label>
+            <button className="btn-secondary h-11 justify-center">Load week</button>
+            <Link
+              className="btn-secondary h-11 justify-center"
+              href={`/app/weekly?creatorId=${creatorId}&week=${currentWeekStart}`}
+            >
+              Jump to current
+            </Link>
+          </form>
+        </section>
+      ) : null}
+
+      {!creatorId ? (
+        <EmptyWeek title="No creators yet" />
+      ) : digests.length === 0 ? (
         <section className="ink-panel">
           <p className="text-stone-600">No weekly digests yet. Run the one-month baseline seed and processor.</p>
         </section>
+      ) : selectedDigest ? (
+        <WeeklyDigestArticle digest={selectedDigest} creatorId={creatorId} />
       ) : (
-        digests.map((digest) => (
-          <WeeklyDigestArticle key={digest.id} digest={digest} />
-        ))
+        <EmptyWeek title="No weekly digest for this selected week" />
       )}
     </div>
   );
 }
 
-function WeeklyDigestArticle({ digest }: { digest: WeeklyRow }) {
+function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creatorId: string }) {
   const parsed = parseWeeklyDigestRow(digest);
   return (
     <article className="newspaper-sheet">
@@ -107,7 +149,11 @@ function WeeklyDigestArticle({ digest }: { digest: WeeklyRow }) {
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {parsed.weekly_posts.length ? (
             parsed.weekly_posts.map((post) => (
-              <article key={`${post.date}-${post.title}`} className="border-t border-stone-300 pt-3">
+              <Link
+                key={`${post.date}-${post.title}`}
+                href={`/app/daily?creatorId=${creatorId}&date=${post.date}`}
+                className="block border-t border-stone-300 pt-3 text-stone-900 transition hover:border-stone-900 hover:bg-white/55"
+              >
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-stone-500">
                   {post.date} / {post.type}
                 </p>
@@ -116,7 +162,7 @@ function WeeklyDigestArticle({ digest }: { digest: WeeklyRow }) {
                 <p className="mt-2 text-sm leading-6 text-stone-700">
                   <strong>Why it matters:</strong> {post.why_it_matters}
                 </p>
-              </article>
+              </Link>
             ))
           ) : (
             <p className="text-sm text-stone-600">No weekly posts were stored for this week.</p>
@@ -124,8 +170,8 @@ function WeeklyDigestArticle({ digest }: { digest: WeeklyRow }) {
         </div>
       </section>
 
-      <section className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="space-y-4">
+      <section className="mt-6">
+        <div className="grid gap-4 lg:grid-cols-2">
           {parsed.research_briefs.map((brief) => (
             <article key={brief.title} className="article-column">
               <h4>{brief.title}</h4>
@@ -141,24 +187,55 @@ function WeeklyDigestArticle({ digest }: { digest: WeeklyRow }) {
             </article>
           ))}
         </div>
-        <aside className="ink-panel">
-          <h4 className="section-kicker">Source notes</h4>
-          <ul className="mt-3 space-y-3 text-sm leading-6 text-stone-700">
-            {parsed.source_notes.length ? (
-              parsed.source_notes.map((source) => (
-                <li key={`${source.date}-${source.label}`}>
-                  <strong>{source.date} / {source.label}:</strong> {source.note}
-                </li>
-              ))
-            ) : (
-              <li>No external research source notes were stored for this week.</li>
-            )}
-          </ul>
-        </aside>
       </section>
 
-      <div className="prose-newsletter mt-6 whitespace-pre-wrap">{parsed.newsletter_markdown}</div>
+      <NewsletterMarkdown markdown={parsed.newsletter_markdown} />
     </article>
+  );
+}
+
+function EmptyWeek({ title }: { title: string }) {
+  return (
+    <section className="newspaper-sheet text-center">
+      <p className="section-kicker">Empty week</p>
+      <h2 className="mt-3 font-serif text-4xl font-black">{title}</h2>
+      <p className="mx-auto mt-3 max-w-xl text-stone-600">
+        Weekly editions appear after daily digests exist for a completed Sunday-to-Saturday week.
+      </p>
+    </section>
+  );
+}
+
+function NewsletterMarkdown({ markdown }: { markdown: string }) {
+  const blocks = markdown
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  return (
+    <div className="prose-newsletter mt-6 space-y-4">
+      {blocks.map((block, index) => {
+        if (block.startsWith("### ")) {
+          return <h5 key={index} className="font-serif text-xl font-black text-stone-950">{block.slice(4)}</h5>;
+        }
+        if (block.startsWith("## ")) {
+          return <h4 key={index} className="font-serif text-2xl font-black text-stone-950">{block.slice(3)}</h4>;
+        }
+        if (block.startsWith("# ")) {
+          return <h4 key={index} className="font-serif text-3xl font-black text-stone-950">{block.slice(2)}</h4>;
+        }
+        if (block.split("\n").every((line) => line.trim().startsWith("- "))) {
+          return (
+            <ul key={index} className="list-disc space-y-2 pl-5">
+              {block.split("\n").map((line) => (
+                <li key={line}>{line.trim().slice(2)}</li>
+              ))}
+            </ul>
+          );
+        }
+        return <p key={index}>{block.replace(/\n/g, " ")}</p>;
+      })}
+    </div>
   );
 }
 

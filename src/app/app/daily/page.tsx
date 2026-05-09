@@ -34,6 +34,7 @@ export default async function DailyPage({
   const digests = await getDailyDigests(user.id, creatorId);
   const availableDates = [...new Set(digests.map((digest) => digest.digest_date))];
   const selectedDate = params.date ?? availableDates[0] ?? new Date().toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
   const picker = getDailyVideoPickerState(digests, selectedDate);
   const dateDigests = digests.filter((digest) => digest.digest_date === selectedDate);
   const selected =
@@ -43,7 +44,7 @@ export default async function DailyPage({
   return (
     <div className="space-y-6">
       <section className="ink-panel">
-        <form method="get" className="grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
+        <form method="get" className="grid gap-4 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
           <input type="hidden" name="creatorId" value={creatorId} />
           <label className="block text-sm font-bold text-stone-800">
             Date
@@ -77,6 +78,12 @@ export default async function DailyPage({
             </label>
           ) : null}
           <button className="btn-secondary h-11 justify-center">Load edition</button>
+          <Link
+            className="btn-secondary h-11 justify-center"
+            href={`/app/daily?creatorId=${creatorId}&date=${today}`}
+          >
+            Jump to current
+          </Link>
         </form>
       </section>
 
@@ -99,8 +106,8 @@ function EmptyPage({ title, href, action }: { title: string; href: string; actio
       <p className="section-kicker">Empty edition</p>
       <h2 className="mt-3 font-serif text-4xl font-black">{title}</h2>
       <p className="mx-auto mt-3 max-w-xl text-stone-600">
-        Daily digests appear after a job processes video transcripts or clearly marked
-        AI-derived notes.
+        Daily digests appear after a job discovers the video, prepares source material,
+        and stores the edition.
       </p>
       <Link className="mt-6 inline-flex btn-primary" href={href}>
         {action}

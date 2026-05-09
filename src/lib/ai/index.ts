@@ -146,22 +146,27 @@ export async function generateWeeklyDigestPayload(input: {
       "\n\n## Source-backed recap\n\n" +
       input.sourceText.slice(0, 2600),
     executive_insights_memo:
-      "Weekly provider output was unavailable, so this memo stays conservative: treat the week as a set of source-backed creator themes, then regenerate when the weekly model route is healthy for deeper market and board-level synthesis.",
+      "Weekly provider output was unavailable, so this memo stays conservative while still giving operators a useful frame. Treat the week as a set of source-backed creator themes rather than a fully researched market call. The immediate executive question is which themes are recurring enough to deserve a small experiment, which claims need stronger evidence, and which workflows would create measurable value if they became repeatable. Regenerate this digest with the full provider stack when credentials and model routes are healthy to restore deeper market and board-level synthesis.",
     board_level_implications: [
       "Ask what claims are directly supported by the daily digests before turning them into strategy.",
       "Separate workflow value, infrastructure cost, and model capability when discussing AI investments.",
     ],
     market_investment_lens:
-      "No date-scoped external market research was available in fallback mode, so this section avoids investment claims beyond the cached weekly source material.",
+      "No date-scoped external market research was available in fallback mode, so this section avoids unsupported investment claims. The useful market read is narrower: the cached daily digests can still show which operational problems kept appearing, such as workflow reliability, cost, evaluation, adoption friction, or infrastructure pressure. Those repeated problems are often better signals than isolated product announcements because they point to budgets, tooling gaps, and buyer pain that may persist beyond a single news cycle.\n\nFor practical interpretation, treat this as an ecosystem map rather than a recommendation. If several daily digests point toward evaluation and deployment discipline, the likely implication is demand for tooling that makes AI systems more observable, controllable, and cost-aware. If the week instead centers on model capability, the implication may be different: faster experimentation, shifting vendor comparisons, or pressure on teams to revisit build-versus-buy decisions. Without external research, the safest conclusion is directional, not predictive.",
     weekly_posts: weeklyPosts,
     research_briefs: [
       {
         title: "Provider fallback limits",
         thesis:
-          "The app can preserve a weekly archive even when the preferred weekly model route fails, but deeper research should be regenerated with the full provider stack.",
+          "The app can preserve a weekly archive even when the preferred weekly model route fails, but deeper research should be regenerated with the full provider stack before treating the brief as a complete market read.",
         evidence: ["Cached daily digest text", "Weekly provider route returned unusable JSON"],
-        implications: ["Readers get a grounded archive first, then richer synthesis after regeneration."],
-        uncertainty: "The fallback does not include independent market research.",
+        implications: [
+          "Readers still get a grounded archive of what the creator covered, which protects continuity when providers fail.",
+          "Strategy, market, and investment interpretation should remain conservative until the richer weekly model route and any date-scoped research notes are available.",
+          "A useful verification path is to inspect the daily digests, confirm the recurring themes, then regenerate the weekly edition once provider output is healthy.",
+        ],
+        uncertainty:
+          "The fallback does not include independent market research, so it should not be read as a comprehensive external evidence review.",
       },
     ],
     source_notes: fallbackDates.slice(0, 10).map((date, index) => ({

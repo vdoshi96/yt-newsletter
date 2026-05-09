@@ -3,6 +3,10 @@ import {
   EXPLANATION_LEVEL_KEYS,
   normalizeExplanationLevels,
 } from "./explanation-levels";
+import {
+  cleanNewsletterMarkdownArtifacts,
+  cleanSkepticismNote,
+} from "./text-cleanup";
 
 export const layoutTypeSchema = z.enum([
   "single_big_story",
@@ -89,6 +93,7 @@ export const dailyDigestSchema = z
   })
   .transform((digest) => ({
     ...digest,
+    skepticism_notes: cleanSkepticismNote(digest.skepticism_notes),
     explanation_levels: normalizeExplanationLevels(
       digest.explanation_levels,
       digest.plain_english_explanation,
@@ -124,6 +129,7 @@ export const weeklyDigestSchema = z
   })
   .transform((digest) => ({
     ...digest,
+    newsletter_markdown: cleanNewsletterMarkdownArtifacts(digest.newsletter_markdown),
     explanation_levels: normalizeExplanationLevels(
       digest.explanation_levels,
       digest.newsletter_markdown,
