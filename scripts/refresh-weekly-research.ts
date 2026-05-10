@@ -2,8 +2,20 @@ import "./load-env";
 import { closeSql, getSql } from "@/lib/db";
 import { weeklyDigestSchema } from "@/lib/digests/schemas";
 import { normalizeExplanationLevels } from "@/lib/digests/explanation-levels";
+import { minimumTranscriptCharacters } from "@/lib/digests/grounding";
+import { getPodcastScriptConfig } from "@/lib/podcasts/config";
+import {
+  buildTwoHostPodcastLines,
+  formatTwoHostPodcastScript,
+  getPodcastCastForWeek,
+} from "@/lib/podcasts/two-host";
+import { buildWeeklySourceReferences } from "@/lib/weekly/source-text";
 
 type DailyRow = {
+  video_id?: string | null;
+  transcript_id?: string | null;
+  transcript_source?: string | null;
+  transcript_length?: number | null;
   digest_date: string;
   title: string;
   front_page_summary: string;
@@ -498,6 +510,7 @@ const weeklyResearch: Record<string, WeeklyConfig> = {
 
 async function main() {
   const sql = getSql();
+  const minTranscriptCharacters = minimumTranscriptCharacters();
   try {
     const weeks = await sql<WeeklyRow[]>`
       select weekly_digests.id, weekly_digests.creator_id, week_start::text, week_end::text
@@ -516,6 +529,10 @@ async function main() {
 
       const dailyRows = await sql<DailyRow[]>`
         select
+          video_id::text,
+          transcript_id::text,
+          transcript_source,
+          transcript_length,
           digest_date::text,
           title,
           front_page_summary,
@@ -525,13 +542,71 @@ async function main() {
         from daily_digests
         where creator_id = ${week.creator_id}
           and digest_date between ${week.week_start} and ${week.week_end}
+          and grounding_status = 'grounded'
+          and transcript_source = 'youtube_transcript_free'
+          and coalesce(transcript_length, 0) >= ${minTranscriptCharacters}
         order by digest_date asc, created_at asc
       `;
 
-      const payload = weeklyDigestSchema.parse(buildPayload(week, dailyRows, config));
+      const rawPayload = buildPayload(week, dailyRows, config);
+      const sourceReferences = buildWeeklySourceReferences(dailyRows);
+      const generationTimestamp = new Date().toISOString();
+      const scriptConfig = getPodcastScriptConfig();
+      const draftPayload = weeklyDigestSchema.parse({
+        ...rawPayload,
+        weekly_grounding: {
+          grounded: dailyRows.length > 0,
+          source: "daily_digests_and_curated_research",
+          source_digest_count: dailyRows.length,
+          source_date_range: {
+            start: week.week_start,
+            end: week.week_end,
+          },
+          generated_at: generationTimestamp,
+          generation_model: "curated:weekly_research_refresh",
+          limitations: [
+            "Curated research notes are date-scoped operator inputs; daily video claims remain grounded in transcript-backed daily digests.",
+          ],
+        },
+        source_references: sourceReferences,
+        podcast_generation: {
+          status: "pending",
+          source_references: sourceReferences,
+        },
+      });
+      const cast = getPodcastCastForWeek(week.week_start);
+      const podcastScript = formatTwoHostPodcastScript(
+        buildTwoHostPodcastLines(draftPayload, scriptConfig, cast),
+      );
+      const payload = weeklyDigestSchema.parse({
+        ...draftPayload,
+        podcast_script: podcastScript,
+        podcast_generation: {
+          status: "script_generated",
+          target_minutes: scriptConfig.targetMinutes,
+          words_per_minute: scriptConfig.wordsPerMinute,
+          word_count: podcastScript.split(/\s+/).filter(Boolean).length,
+          cast_id: cast.id,
+          generated_at: generationTimestamp,
+          source_references: sourceReferences,
+        },
+      });
       await sql`
         update weekly_digests
         set
+          source_digest_count = ${payload.weekly_grounding.source_digest_count},
+          source_date_range = ${sql.json(toJsonParameter(payload.weekly_grounding.source_date_range))},
+          grounding_status = ${payload.weekly_grounding.grounded ? "grounded" : "pending"},
+          generation_model = ${payload.weekly_grounding.generation_model ?? null},
+          generated_at = ${payload.weekly_grounding.generated_at ?? null},
+          processing_status = ${payload.weekly_grounding.grounded ? "digest_generated" : "pending"},
+          podcast_audio_asset_id = null,
+          podcast_status = 'pending',
+          podcast_generation_metadata = ${sql.json(toJsonParameter(payload.podcast_generation))},
+          podcast_generated_at = null,
+          podcast_model = null,
+          podcast_voice_config = null,
+          source_references = ${sql.json(toJsonParameter(sourceReferences))},
           title = ${payload.title},
           newsletter_markdown = ${payload.newsletter_markdown},
           ranked_topics = ${sql.json(payload.ranked_topics)},

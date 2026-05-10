@@ -5,6 +5,7 @@ export type BackfillCatalogVideo = {
   youtube_video_id: string;
   title?: string | null;
   duration_seconds?: number | null;
+  published_at?: string | null;
 };
 
 export function filterBackfillCatalogVideos<T extends BackfillCatalogVideo>(videos: T[]) {
@@ -21,6 +22,28 @@ export function isBackfillCatalogVideo(video: BackfillCatalogVideo) {
   if (title.includes("shorts-style clip")) return false;
 
   return true;
+}
+
+export type BackfillDateWindow = {
+  since: Date;
+  until: Date;
+};
+
+export function filterBackfillVideosByDate<T extends BackfillCatalogVideo>(
+  videos: T[],
+  window: BackfillDateWindow | null,
+) {
+  if (!window) return videos;
+  return videos.filter((video) => isBackfillVideoInDateWindow(video, window));
+}
+
+export function isBackfillVideoInDateWindow(
+  video: BackfillCatalogVideo,
+  window: BackfillDateWindow,
+) {
+  if (!video.published_at) return false;
+  const publishedAt = new Date(video.published_at);
+  return publishedAt >= window.since && publishedAt <= window.until;
 }
 
 export type DailyBackfillGrounding = {
@@ -106,6 +129,7 @@ export type BackfillVideoCandidate = {
   videoId: string;
   hasOpenIngestItem: boolean;
   hasGroundedDigest: boolean;
+  hasTerminalFailure?: boolean;
 };
 
 export function selectVideosForGroundedBackfill(
@@ -116,9 +140,17 @@ export function selectVideosForGroundedBackfill(
 
   for (const candidate of candidates) {
     if (candidate.hasOpenIngestItem) continue;
+    if (candidate.hasTerminalFailure && !options.forceRegenerate) continue;
     if (candidate.hasGroundedDigest && !options.forceRegenerate) continue;
     selected.add(candidate.videoId);
   }
 
   return [...selected];
+}
+
+export function shouldRefreshWeeklyAfterBackfill(input: {
+  selectedVideoCount: number;
+  weeklyRangeCount: number;
+}) {
+  return input.selectedVideoCount > 0 || input.weeklyRangeCount > 0;
 }

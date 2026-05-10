@@ -2,14 +2,25 @@ import "./load-env";
 import { closeSql, getSql } from "@/lib/db";
 import { minimumTranscriptCharacters } from "@/lib/digests/grounding";
 import {
+  filterBackfillVideosByDate,
   filterBackfillCatalogVideos,
   selectVideosForGroundedBackfill,
+  shouldRefreshWeeklyAfterBackfill,
+  type BackfillDateWindow,
 } from "@/lib/backfill/safeguards";
 import { createIngestJob, upsertVideos } from "@/lib/creators";
 import { numberEnv } from "@/lib/config";
 import { processIngestQueue } from "@/lib/processor";
 import { discoverCreatorVideos } from "@/lib/youtube/client";
-import { ensureCompletedWeeklyDigestsForCreator } from "@/lib/weekly/generate";
+import {
+  ensureCompletedWeeklyDigestsForCreator,
+  ensureWeeklyDigestForRange,
+} from "@/lib/weekly/generate";
+import {
+  getSaturdayToFridayWeekRange,
+  isWeeklyDigestReady,
+  type WeeklyRange,
+} from "@/lib/weekly/week-range";
 
 type BackfillCreator = {
   creator_id: string;
@@ -22,6 +33,7 @@ type CandidateRow = {
   video_id: string;
   has_open_ingest_item: boolean;
   has_grounded_digest: boolean;
+  has_terminal_failure: boolean;
 };
 
 const args = new Map(
@@ -42,12 +54,20 @@ async function main() {
   const discoveryLimit = numericArg("limit", numberEnv("BACKFILL_VIDEO_LOOKBACK_LIMIT", 500));
   const processLimit = numericArg("process-limit", numberEnv("BACKFILL_PROCESS_LIMIT", 25));
   const creatorId = args.get("creator-id");
+  const dateWindow = parseDateWindow();
+  const weeklyRanges = dateWindow ? getWeeklyRangesForDateWindow(dateWindow) : null;
   const minTranscriptCharacters = minimumTranscriptCharacters();
   const creators = await getCreators(creatorId);
 
   if (!creators.length) {
     console.log("No configured creators with channel URLs were found.");
     return;
+  }
+
+  if (dateWindow) {
+    console.log(
+      `Backfill date window: ${toDateString(dateWindow.since)} to ${toDateString(dateWindow.until)} (${weeklyRanges?.length ?? 0} weekly window(s)).`,
+    );
   }
 
   let discovered = 0;
@@ -60,8 +80,9 @@ async function main() {
     );
     const discovery = await discoverCreatorVideos(creator.channel_url, discoveryLimit);
     discovered += discovery.videos.length;
-    const catalogVideos = filterBackfillCatalogVideos(discovery.videos);
-    const skippedShorts = discovery.videos.length - catalogVideos.length;
+    const longFormVideos = filterBackfillCatalogVideos(discovery.videos);
+    const catalogVideos = filterBackfillVideosByDate(longFormVideos, dateWindow);
+    const skippedByDate = longFormVideos.length - catalogVideos.length;
     const candidateRows = dryRun
       ? await getDryRunCandidateRows(
           creator.creator_id,
@@ -77,16 +98,24 @@ async function main() {
         videoId: row.video_id,
         hasOpenIngestItem: row.has_open_ingest_item,
         hasGroundedDigest: row.has_grounded_digest,
+        hasTerminalFailure: row.has_terminal_failure,
       })),
       { forceRegenerate },
     );
 
     console.log(
-      `Backfill candidates: ${selected.length} selected, ${candidateRows.length - selected.length} skipped, ${skippedShorts} Shorts/short clips ignored.`,
+      `Backfill candidates: ${selected.length} selected, ${candidateRows.length - selected.length} skipped, ${discovery.videos.length - longFormVideos.length} Shorts/short clips ignored, ${skippedByDate} outside date window.`,
     );
+    if (
+      shouldRefreshWeeklyAfterBackfill({
+        selectedVideoCount: selected.length,
+        weeklyRangeCount: weeklyRanges?.length ?? 0,
+      })
+    ) {
+      touchedCreators.add(creator.creator_id);
+    }
     if (!selected.length) continue;
 
-    touchedCreators.add(creator.creator_id);
     queued += selected.length;
     if (dryRun) continue;
 
@@ -112,13 +141,20 @@ async function main() {
   }
 
   for (const creatorIdToRefresh of touchedCreators) {
-    const weekly = await ensureCompletedWeeklyDigestsForCreator({
-      creatorId: creatorIdToRefresh,
-      forceRegenerate: true,
-    });
-    console.log(
-      `Refreshed ${weekly.weekCount} weekly digest(s) for creator ${creatorIdToRefresh}.`,
-    );
+    if (weeklyRanges) {
+      const refreshed = await refreshWeeklyRangesForCreator(creatorIdToRefresh, weeklyRanges);
+      console.log(
+        `Refreshed ${refreshed.length} date-window weekly digest(s) for creator ${creatorIdToRefresh}.`,
+      );
+    } else {
+      const weekly = await ensureCompletedWeeklyDigestsForCreator({
+        creatorId: creatorIdToRefresh,
+        forceRegenerate: true,
+      });
+      console.log(
+        `Refreshed ${weekly.weekCount} weekly digest(s) for creator ${creatorIdToRefresh}.`,
+      );
+    }
   }
 
 }
@@ -159,8 +195,16 @@ async function getCandidateRows(videoIds: string[], minTranscriptCharacters: num
       ) as has_open_ingest_item,
       exists (
         select 1
+        from ingest_job_items
+        where ingest_job_items.video_id = videos.id
+          and ingest_job_items.status = 'failed'
+          and ingest_job_items.processing_status = 'failed'
+      ) as has_terminal_failure,
+      exists (
+        select 1
         from daily_digests
         where daily_digests.video_id = videos.id
+          and daily_digests.grounding_status = 'grounded'
           and coalesce(
             daily_digests.transcript_source,
             daily_digests.full_digest_json->'transcript_grounding'->>'transcript_source'
@@ -210,9 +254,19 @@ async function getDryRunCandidateRows(
       exists (
         select 1
         from videos
+        join ingest_job_items on ingest_job_items.video_id = videos.id
+        where videos.youtube_video_id = discovered.youtube_video_id
+          and videos.creator_id = ${creatorId}
+          and ingest_job_items.status = 'failed'
+          and ingest_job_items.processing_status = 'failed'
+      ) as has_terminal_failure,
+      exists (
+        select 1
+        from videos
         join daily_digests on daily_digests.video_id = videos.id
         where videos.youtube_video_id = discovered.youtube_video_id
           and videos.creator_id = ${creatorId}
+          and daily_digests.grounding_status = 'grounded'
           and coalesce(
             daily_digests.transcript_source,
             daily_digests.full_digest_json->'transcript_grounding'->>'transcript_source'
@@ -247,6 +301,79 @@ async function drainQueue(processLimit: number, forceRegenerate: boolean) {
 function numericArg(name: string, fallback: number) {
   const value = Number(args.get(name));
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function parseDateWindow(): BackfillDateWindow | null {
+  const since = args.get("since");
+  const until = args.get("until");
+  if (!since && !until) return null;
+
+  const sinceDate = parseDateArg("since", since, "start");
+  const untilDate = parseDateArg("until", until, "end");
+  if (sinceDate > untilDate) {
+    throw new Error("--since must be before or equal to --until.");
+  }
+  return {
+    since: sinceDate,
+    until: untilDate,
+  };
+}
+
+function parseDateArg(name: string, value: string | undefined, edge: "start" | "end") {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error(`--${name}=YYYY-MM-DD is required when using a date-window backfill.`);
+  }
+  const suffix = edge === "start" ? "T00:00:00.000Z" : "T23:59:59.999Z";
+  const date = new Date(`${value}${suffix}`);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`--${name} must be a valid YYYY-MM-DD date.`);
+  }
+  return date;
+}
+
+function getWeeklyRangesForDateWindow(window: BackfillDateWindow) {
+  const ranges = new Map<string, WeeklyRange>();
+  const cursor = new Date(
+    Date.UTC(
+      window.since.getUTCFullYear(),
+      window.since.getUTCMonth(),
+      window.since.getUTCDate(),
+    ),
+  );
+  const end = new Date(
+    Date.UTC(
+      window.until.getUTCFullYear(),
+      window.until.getUTCMonth(),
+      window.until.getUTCDate(),
+    ),
+  );
+
+  while (cursor <= end) {
+    const range = getSaturdayToFridayWeekRange(cursor);
+    if (isWeeklyDigestReady(range)) {
+      ranges.set(range.weekStart, range);
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return [...ranges.values()].sort((left, right) => left.weekStart.localeCompare(right.weekStart));
+}
+
+async function refreshWeeklyRangesForCreator(creatorId: string, ranges: WeeklyRange[]) {
+  const refreshed: string[] = [];
+  for (const range of ranges) {
+    const id = await ensureWeeklyDigestForRange({
+      creatorId,
+      range,
+      forceRegenerate: true,
+    });
+    if (id) refreshed.push(id);
+  }
+  return refreshed;
+}
+
+function toDateString(date: Date) {
+  return date.toISOString().slice(0, 10);
 }
 
 main()

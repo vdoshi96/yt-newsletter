@@ -114,6 +114,11 @@ async function getWeeklyDigests() {
       podcast_status
     from weekly_digests
     where (${week ?? null}::date is null or week_start = ${week ?? null}::date)
+      and grounding_status = 'grounded'
+      and processing_status = 'digest_generated'
+      and coalesce(source_digest_count, 0) > 0
+      and generation_model is not null
+      and generated_at is not null
     order by week_start desc
   `;
   return rows
@@ -195,11 +200,14 @@ async function generatePodcastForWeek(input: {
   const script = formatTwoHostPodcastScript(lines);
   const wordCount = countWords(script);
   const voiceConfig = buildVoiceConfig(cast);
-  const sourceReferences = digest.source_notes.map((note) => ({
-    date: note.date,
-    label: note.label,
-    url: note.url,
-  }));
+  const sourceReferences = digest.source_references.length
+    ? digest.source_references
+    : digest.source_notes.map((note) => ({
+        date: note.date,
+        label: note.label,
+        url: note.url,
+        note: note.note,
+      }));
 
   if (audioConfig.provider === "external_manual") {
     await savePodcastScriptOnly({
@@ -448,7 +456,7 @@ async function savePodcastAsset(input: {
   provider: string;
   model: string;
   cast: PodcastHostCast;
-  sourceReferences: Array<Record<string, string | undefined>>;
+  sourceReferences: Array<Record<string, unknown>>;
   voiceConfig: Record<string, unknown>;
   estimatedCostUsd: number;
 }) {
@@ -481,6 +489,18 @@ async function savePodcastAsset(input: {
       ${sql.json(toJsonParameter(generationMetadata))},
       ${sql.json(toJsonParameter(input.sourceReferences))}
     )
+    on conflict (storage_path) do update set
+      creator_id = excluded.creator_id,
+      weekly_digest_id = excluded.weekly_digest_id,
+      asset_type = excluded.asset_type,
+      provider = excluded.provider,
+      model = excluded.model,
+      prompt = excluded.prompt,
+      public_url = excluded.public_url,
+      generation_status = excluded.generation_status,
+      generation_metadata = excluded.generation_metadata,
+      source_references = excluded.source_references,
+      created_at = now()
     returning id
   `;
   await sql`
@@ -526,7 +546,7 @@ async function savePodcastScriptOnly(input: {
   script: string;
   wordCount: number;
   cast: PodcastHostCast;
-  sourceReferences: Array<Record<string, string | undefined>>;
+  sourceReferences: Array<Record<string, unknown>>;
   voiceConfig: Record<string, unknown>;
 }) {
   const sql = getSql();
@@ -559,7 +579,10 @@ async function markPodcastFailed(weeklyDigestId: string, message: string) {
   await sql`
     update weekly_digests
     set
+      podcast_audio_asset_id = null,
       podcast_status = 'failed',
+      podcast_generated_at = null,
+      podcast_model = null,
       podcast_generation_metadata = coalesce(podcast_generation_metadata, '{}'::jsonb) ||
         ${sql.json(toJsonParameter({
           status: "failed",
@@ -577,7 +600,7 @@ function buildPodcastGenerationMetadata(input: {
   model: string;
   cast: PodcastHostCast;
   voiceConfig: Record<string, unknown>;
-  sourceReferences: Array<Record<string, string | undefined>>;
+  sourceReferences: Array<Record<string, unknown>>;
 }) {
   return {
     status: "podcast_generated",

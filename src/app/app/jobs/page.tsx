@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CheckCircle2, Plus } from "lucide-react";
+import { AlertCircle, CheckCircle2, Plus } from "lucide-react";
 import { requireUser } from "@/lib/auth/current-user";
 import { getIngestJobsForUser } from "@/lib/creators";
 import { summarizeJobProgress } from "@/lib/jobs/progress";
@@ -88,7 +88,11 @@ export default async function JobsPage({
                   <p>Total: {job.total_count}</p>
                   <p>Processed: {job.processed_count}</p>
                   <p className="inline-flex items-center gap-1">
-                    <CheckCircle2 aria-hidden className="size-4 text-emerald-600" />
+                    {job.failed_count > 0 ? (
+                      <AlertCircle aria-hidden className="size-4 text-red-600" />
+                    ) : (
+                      <CheckCircle2 aria-hidden className="size-4 text-emerald-600" />
+                    )}
                     Failed: {job.failed_count}
                   </p>
                 </div>

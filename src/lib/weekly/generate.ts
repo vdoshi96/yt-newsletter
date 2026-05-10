@@ -1,6 +1,7 @@
 import { generateWeeklyDigestPayload } from "@/lib/ai";
 import { booleanEnv } from "@/lib/config";
 import { getSql } from "@/lib/db";
+import { minimumTranscriptCharacters } from "@/lib/digests/grounding";
 import { loadPrompt } from "@/lib/prompts";
 import {
   buildTwoHostPodcastLines,
@@ -17,7 +18,11 @@ import {
   isWeeklyDigestReady,
   type WeeklyRange,
 } from "@/lib/weekly/week-range";
-import { buildWeeklySourceText, type WeeklySourceDigest } from "@/lib/weekly/source-text";
+import {
+  buildWeeklySourceReferences,
+  buildWeeklySourceText,
+  type WeeklySourceDigest,
+} from "@/lib/weekly/source-text";
 
 export async function ensureWeeklyDigestForVideoWeek(input: {
   creatorId: string;
@@ -40,10 +45,14 @@ export async function ensureCompletedWeeklyDigestsForCreator(input: {
   forceRegenerate?: boolean;
 }) {
   const sql = getSql();
+  const minTranscriptCharacters = minimumTranscriptCharacters();
   const rows = await sql<Array<{ digest_date: string }>>`
     select distinct digest_date::text as digest_date
     from daily_digests
     where creator_id = ${input.creatorId}
+      and grounding_status = 'grounded'
+      and transcript_source = 'youtube_transcript_free'
+      and coalesce(transcript_length, 0) >= ${minTranscriptCharacters}
     order by digest_date asc
   `;
 
@@ -75,6 +84,7 @@ export async function ensureWeeklyDigestForRange(input: {
 }) {
   const sql = getSql();
   const { weekStart, weekEnd } = input.range;
+  const minTranscriptCharacters = minimumTranscriptCharacters();
   const existing = await sql<{ id: string }[]>`
     select id
     from weekly_digests
@@ -86,6 +96,10 @@ export async function ensureWeeklyDigestForRange(input: {
 
   const daily = await sql<WeeklySourceDigest[]>`
     select
+      video_id::text,
+      transcript_id::text,
+      transcript_source,
+      transcript_length,
       title,
       front_page_summary,
       plain_english_explanation,
@@ -95,12 +109,16 @@ export async function ensureWeeklyDigestForRange(input: {
     from daily_digests
     where creator_id = ${input.creatorId}
       and digest_date between ${weekStart} and ${weekEnd}
+      and grounding_status = 'grounded'
+      and transcript_source = 'youtube_transcript_free'
+      and coalesce(transcript_length, 0) >= ${minTranscriptCharacters}
     order by digest_date asc, created_at asc
   `;
   if (!daily.length) return existing[0]?.id ?? null;
 
   const prompt = await loadPrompt("weekly_digest");
   const sourceText = buildWeeklySourceText(daily);
+  const sourceReferences = buildWeeklySourceReferences(daily);
   const generatedPayload = await generateWeeklyDigestPayload({
     creatorId: input.creatorId,
     weekStart,
@@ -116,6 +134,7 @@ export async function ensureWeeklyDigestForRange(input: {
   );
   const payload = {
     ...generatedPayload,
+    source_references: sourceReferences,
     podcast_script: podcastScript,
     podcast_generation: {
       ...generatedPayload.podcast_generation,
@@ -125,11 +144,7 @@ export async function ensureWeeklyDigestForRange(input: {
       word_count: countWords(podcastScript),
       cast_id: cast.id,
       generated_at: new Date().toISOString(),
-      source_references: generatedPayload.source_notes.map((note) => ({
-        date: note.date,
-        label: note.label,
-        url: note.url,
-      })),
+      source_references: sourceReferences,
     },
   };
   const weeklyGrounding = payload.weekly_grounding;
@@ -145,9 +160,13 @@ export async function ensureWeeklyDigestForRange(input: {
         generation_model = ${weeklyGrounding.generation_model ?? null},
         generated_at = ${weeklyGrounding.generated_at ?? null},
         processing_status = 'digest_generated',
-        podcast_status = coalesce(nullif(podcast_status, 'failed'), 'pending'),
+        podcast_audio_asset_id = null,
+        podcast_status = 'pending',
         podcast_generation_metadata = ${sql.json(toJsonParameter(payload.podcast_generation))},
-        source_references = ${sql.json(toJsonParameter(payload.source_notes))},
+        podcast_generated_at = null,
+        podcast_model = null,
+        podcast_voice_config = null,
+        source_references = ${sql.json(toJsonParameter(sourceReferences))},
         title = ${payload.title},
         newsletter_markdown = ${payload.newsletter_markdown},
         ranked_topics = ${sql.json(toJsonParameter(payload.ranked_topics))},
@@ -195,7 +214,7 @@ export async function ensureWeeklyDigestForRange(input: {
       'digest_generated',
       'pending',
       ${sql.json(toJsonParameter(payload.podcast_generation))},
-      ${sql.json(toJsonParameter(payload.source_notes))},
+      ${sql.json(toJsonParameter(sourceReferences))},
       ${payload.title},
       ${payload.newsletter_markdown},
       ${sql.json(toJsonParameter(payload.ranked_topics))},
@@ -287,6 +306,15 @@ async function maybeGeneratePodcastAudio(input: {
       ${storagePath},
       ${publicUrl}
     )
+    on conflict (storage_path) do update set
+      creator_id = excluded.creator_id,
+      weekly_digest_id = excluded.weekly_digest_id,
+      asset_type = excluded.asset_type,
+      provider = excluded.provider,
+      model = excluded.model,
+      prompt = excluded.prompt,
+      public_url = excluded.public_url,
+      created_at = now()
     returning id
   `;
   await sql`

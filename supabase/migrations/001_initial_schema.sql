@@ -258,6 +258,65 @@ alter table assets
   add column if not exists generation_metadata jsonb,
   add column if not exists source_references jsonb;
 
+delete from transcripts
+where id in (
+  select id
+  from (
+    select
+      id,
+      row_number() over (
+        partition by video_id, source
+        order by
+          case when status = 'completed' then 0 else 1 end,
+          created_at desc,
+          id desc
+      ) as duplicate_rank
+    from transcripts
+    where video_id is not null
+  ) ranked_transcripts
+  where duplicate_rank > 1
+);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'transcripts_video_source_unique'
+  ) then
+    alter table transcripts
+      add constraint transcripts_video_source_unique unique (video_id, source);
+  end if;
+end $$;
+
+delete from assets
+where id in (
+  select id
+  from (
+    select
+      id,
+      row_number() over (
+        partition by storage_path
+        order by created_at desc, id desc
+      ) as duplicate_rank
+    from assets
+    where storage_path is not null
+  ) ranked_assets
+  where duplicate_rank > 1
+);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'assets_storage_path_unique'
+  ) then
+    alter table assets
+      add constraint assets_storage_path_unique unique (storage_path);
+  end if;
+end $$;
+
 create index if not exists sessions_expires_at_idx on sessions (expires_at);
 create index if not exists login_attempts_username_created_idx on login_attempts (lower(username), created_at desc);
 create index if not exists videos_creator_published_idx on videos (creator_id, published_at desc);

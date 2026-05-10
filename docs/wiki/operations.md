@@ -27,6 +27,7 @@ Useful flags:
 
 - `--dry-run`: discover and report what would be queued without writing jobs.
 - `--limit=N`: discovery lookback per creator; default `BACKFILL_VIDEO_LOOKBACK_LIMIT=500`.
+- `--since=YYYY-MM-DD` and `--until=YYYY-MM-DD`: limit processing and weekly refreshes to a published-at date window.
 - `BACKFILL_MIN_VIDEO_DURATION_SECONDS`: ignores Shorts/short clips before queueing; default `300`.
 - `--process-limit=N`: queue items to process per loop; default `BACKFILL_PROCESS_LIMIT=25`.
 - `--creator-id=<uuid>`: limit the run to one configured creator.

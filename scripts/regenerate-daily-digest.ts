@@ -248,6 +248,19 @@ async function ensureVerifiedTranscript(row: DigestRow) {
       false,
       null
     )
+    on conflict (video_id, source) do update set
+      status = excluded.status,
+      transcript_text = excluded.transcript_text,
+      timed_segments = excluded.timed_segments,
+      derived_notes = excluded.derived_notes,
+      transcript_length = excluded.transcript_length,
+      source_hash = excluded.source_hash,
+      extraction_metadata = excluded.extraction_metadata,
+      extracted_at = excluded.extracted_at,
+      processing_status = excluded.processing_status,
+      needs_retry = excluded.needs_retry,
+      retry_after = excluded.retry_after,
+      updated_at = now()
     returning
       id,
       video_id,

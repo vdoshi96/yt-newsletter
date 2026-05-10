@@ -71,6 +71,29 @@ describe("digest schemas", () => {
     expect(parsed.follow_up_from_yesterday).toBe("No prior digest available.");
   });
 
+  it("normalizes empty optional provider fields without weakening required grounding notes", () => {
+    const parsed = dailyDigestSchema.parse({
+      layout_type: "single_big_story",
+      title: "A digest",
+      dek: "Short dek",
+      front_page_summary: "Summary",
+      plain_english_explanation: "Explanation",
+      why_it_matters: "Why",
+      what_creator_said: [],
+      what_to_do_next: [],
+      free_learning_plan: [],
+      glossary: [],
+      topic_links: [{ label: "Search term", url: "" }],
+      skepticism_notes: "No uncertainty notes.",
+      source_notes: [{ timestamp: null, quote: "Grounded transcript quote.", note: "A note." }],
+      follow_up_from_yesterday: null,
+    });
+
+    expect(parsed.topic_links[0].url).toBeUndefined();
+    expect(parsed.source_notes[0].timestamp).toBeUndefined();
+    expect(parsed.source_notes[0].quote).toBe("Grounded transcript quote.");
+  });
+
   it("accepts a weekly newsletter payload with a podcast script", () => {
     const parsed = weeklyDigestSchema.parse({
       title: "This week in practical AI",
@@ -134,5 +157,40 @@ describe("digest schemas", () => {
     });
 
     expect(parsed.ranked_topics[0].importance_score).toBe(0.85);
+  });
+
+  it("normalizes nullable weekly source URLs and string research fields", () => {
+    const parsed = weeklyDigestSchema.parse({
+      title: "This week in AI",
+      newsletter_markdown: "# Week",
+      weekly_posts: [
+        {
+          date: "2026-05-01",
+          type: "video",
+          title: "Grounded item",
+          summary: "A source-backed weekly item.",
+          why_it_matters: "It matters.",
+          source_url: null,
+        },
+      ],
+      research_briefs: [
+        {
+          title: "Inference economics",
+          thesis: "Costs matter.",
+          evidence: "Daily digest source.",
+          implications: "Track unit costs.",
+          uncertainty: "Pricing changes.",
+        },
+      ],
+      ranked_topics: [{ topic: "Agents", importance_score: 0.8, why_it_matters: "Useful." }],
+      what_changed: "The focus shifted.",
+      what_to_do_next: [],
+      free_learning_plan: [],
+      podcast_script: "This week...",
+    });
+
+    expect(parsed.weekly_posts[0].source_url).toBeUndefined();
+    expect(parsed.research_briefs[0].evidence).toEqual(["Daily digest source."]);
+    expect(parsed.research_briefs[0].implications).toEqual(["Track unit costs."]);
   });
 });

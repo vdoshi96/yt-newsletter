@@ -229,6 +229,27 @@ function DailyPreview({ preview }: { preview: DailyPreviewRow | null }) {
         <p className="mt-2 text-sm text-slate-500">
           {preview.digest_date} · {formatCreatorTitle(preview.creator_title)}
         </p>
+        <dl className="mt-4 grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-2">
+          <div>
+            <dt className="font-bold text-slate-950">Generated</dt>
+            <dd>{preview.generated_at ?? "unknown"}</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-950">Model</dt>
+            <dd>{preview.generation_model ?? "unknown"}</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-950">Grounding</dt>
+            <dd>{preview.grounding_status ?? "pending"}</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-950">Transcript</dt>
+            <dd>
+              {preview.transcript_source ?? "missing"} /{" "}
+              {(preview.transcript_length ?? 0).toLocaleString()} chars
+            </dd>
+          </div>
+        </dl>
       </div>
 
       <div className="mt-5 border-t border-slate-200 pt-4">
@@ -334,12 +355,14 @@ async function getDashboardStats(userId: string) {
         from daily_digests
         join user_creators on user_creators.creator_id = daily_digests.creator_id
         where user_creators.user_id = ${userId}
+          and daily_digests.grounding_status = 'grounded'
       ) as daily_count,
       (
         select count(*)::int
         from weekly_digests
         join user_creators on user_creators.creator_id = weekly_digests.creator_id
         where user_creators.user_id = ${userId}
+          and weekly_digests.grounding_status = 'grounded'
       ) as weekly_count
   `;
   return {
@@ -363,6 +386,11 @@ type DailyPreviewRow = {
   video_id: string;
   video_title: string | null;
   digest_date: string;
+  generation_model: string | null;
+  generated_at: string | null;
+  transcript_source: string | null;
+  transcript_length: number | null;
+  grounding_status: string | null;
   full_digest_json: unknown;
 };
 
@@ -387,7 +415,7 @@ async function getRecentActivity(userId: string) {
         'Daily digest' as type,
         creators.title as creator_title,
         coalesce(daily_digests.digest_date::text, videos.title, daily_digests.title) as detail,
-        'stored' as status
+        coalesce(daily_digests.processing_status, daily_digests.grounding_status, 'pending') as status
       from daily_digests
       join creators on creators.id = daily_digests.creator_id
       join videos on videos.id = daily_digests.video_id
@@ -408,12 +436,19 @@ async function getLatestDailyPreview(userId: string) {
       daily_digests.video_id,
       videos.title as video_title,
       daily_digests.digest_date::text as digest_date,
+      daily_digests.generation_model,
+      daily_digests.generated_at::text as generated_at,
+      daily_digests.transcript_source,
+      daily_digests.transcript_length,
+      daily_digests.grounding_status,
       daily_digests.full_digest_json
     from daily_digests
     join creators on creators.id = daily_digests.creator_id
     join videos on videos.id = daily_digests.video_id
     join user_creators on user_creators.creator_id = daily_digests.creator_id
     where user_creators.user_id = ${userId}
+      and daily_digests.grounding_status = 'grounded'
+      and daily_digests.transcript_source = 'youtube_transcript_free'
     order by daily_digests.digest_date desc, videos.published_at desc nulls last
     limit 1
   `;

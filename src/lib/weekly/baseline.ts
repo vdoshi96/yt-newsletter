@@ -1,8 +1,13 @@
 import { generateWeeklyDigestPayload } from "@/lib/ai";
 import { getPastMonthBaselineWindow, type BaselineWeekWindow } from "@/lib/baseline/month";
 import { getSql } from "@/lib/db";
+import { minimumTranscriptCharacters } from "@/lib/digests/grounding";
 import { loadPrompt } from "@/lib/prompts";
-import { buildWeeklySourceText, type WeeklySourceDigest } from "@/lib/weekly/source-text";
+import {
+  buildWeeklySourceReferences,
+  buildWeeklySourceText,
+  type WeeklySourceDigest,
+} from "@/lib/weekly/source-text";
 
 export async function ensurePastMonthWeeklyDigests(input: {
   creatorId: string;
@@ -34,6 +39,7 @@ async function ensureBaselineWeekDigest(
   options: { forceRegenerate: boolean; generateFromSources: boolean },
 ) {
   const sql = getSql();
+  const minTranscriptCharacters = minimumTranscriptCharacters();
   const existing = await sql<Array<{ id: string; full_digest_json: unknown }>>`
     select id, full_digest_json
     from weekly_digests
@@ -44,6 +50,10 @@ async function ensureBaselineWeekDigest(
 
   const sourceDigests = await sql<WeeklySourceDigest[]>`
     select
+      video_id::text,
+      transcript_id::text,
+      transcript_source,
+      transcript_length,
       title,
       front_page_summary,
       plain_english_explanation,
@@ -53,6 +63,9 @@ async function ensureBaselineWeekDigest(
     from daily_digests
     where creator_id = ${creatorId}
       and digest_date between ${window.weekStart} and ${window.weekEnd}
+      and grounding_status = 'grounded'
+      and transcript_source = 'youtube_transcript_free'
+      and coalesce(transcript_length, 0) >= ${minTranscriptCharacters}
     order by digest_date asc, created_at asc
   `;
 
@@ -74,19 +87,34 @@ async function ensureBaselineWeekDigest(
   const payload = options.generateFromSources && sourceDigests.length
     ? await generateWeeklyFromDailyDigests(creatorId, window, sourceDigests)
     : createEmptyWeekPayload(window);
+  const sourceReferences = buildWeeklySourceReferences(sourceDigests);
+  const payloadWithReferences = {
+    ...payload,
+    source_references: sourceReferences,
+  };
+  const weeklyGrounding = "weekly_grounding" in payloadWithReferences
+    ? payloadWithReferences.weekly_grounding
+    : null;
 
   if (existingId) {
     await sql`
       update weekly_digests
       set
         week_end = ${window.weekEnd},
-        title = ${payload.title},
-        newsletter_markdown = ${payload.newsletter_markdown},
-        ranked_topics = ${sql.json(toJsonParameter(payload.ranked_topics))},
-        what_changed = ${payload.what_changed},
-        what_to_do_next = ${sql.json(toJsonParameter(payload.what_to_do_next))},
-        podcast_script = ${payload.podcast_script},
-        full_digest_json = ${sql.json(toJsonParameter(payload))},
+        source_digest_count = ${weeklyGrounding?.source_digest_count ?? sourceDigests.length},
+        source_date_range = ${sql.json(toJsonParameter(weeklyGrounding?.source_date_range ?? { start: window.weekStart, end: window.weekEnd }))},
+        grounding_status = ${weeklyGrounding?.grounded ? "grounded" : "pending"},
+        generation_model = ${weeklyGrounding?.generation_model ?? null},
+        generated_at = ${weeklyGrounding?.generated_at ?? null},
+        processing_status = ${weeklyGrounding?.grounded ? "digest_generated" : "pending"},
+        source_references = ${sql.json(toJsonParameter(sourceReferences))},
+        title = ${payloadWithReferences.title},
+        newsletter_markdown = ${payloadWithReferences.newsletter_markdown},
+        ranked_topics = ${sql.json(toJsonParameter(payloadWithReferences.ranked_topics))},
+        what_changed = ${payloadWithReferences.what_changed},
+        what_to_do_next = ${sql.json(toJsonParameter(payloadWithReferences.what_to_do_next))},
+        podcast_script = ${payloadWithReferences.podcast_script},
+        full_digest_json = ${sql.json(toJsonParameter(payloadWithReferences))},
         updated_at = now()
       where id = ${existingId}
     `;
@@ -98,6 +126,13 @@ async function ensureBaselineWeekDigest(
       creator_id,
       week_start,
       week_end,
+      source_digest_count,
+      source_date_range,
+      grounding_status,
+      generation_model,
+      generated_at,
+      processing_status,
+      source_references,
       title,
       newsletter_markdown,
       ranked_topics,
@@ -110,13 +145,20 @@ async function ensureBaselineWeekDigest(
       ${creatorId},
       ${window.weekStart},
       ${window.weekEnd},
-      ${payload.title},
-      ${payload.newsletter_markdown},
-      ${sql.json(toJsonParameter(payload.ranked_topics))},
-      ${payload.what_changed},
-      ${sql.json(toJsonParameter(payload.what_to_do_next))},
-      ${payload.podcast_script},
-      ${sql.json(toJsonParameter(payload))}
+      ${weeklyGrounding?.source_digest_count ?? sourceDigests.length},
+      ${sql.json(toJsonParameter(weeklyGrounding?.source_date_range ?? { start: window.weekStart, end: window.weekEnd }))},
+      ${weeklyGrounding?.grounded ? "grounded" : "pending"},
+      ${weeklyGrounding?.generation_model ?? null},
+      ${weeklyGrounding?.generated_at ?? null},
+      ${weeklyGrounding?.grounded ? "digest_generated" : "pending"},
+      ${sql.json(toJsonParameter(sourceReferences))},
+      ${payloadWithReferences.title},
+      ${payloadWithReferences.newsletter_markdown},
+      ${sql.json(toJsonParameter(payloadWithReferences.ranked_topics))},
+      ${payloadWithReferences.what_changed},
+      ${sql.json(toJsonParameter(payloadWithReferences.what_to_do_next))},
+      ${payloadWithReferences.podcast_script},
+      ${sql.json(toJsonParameter(payloadWithReferences))}
     )
     returning id
   `;

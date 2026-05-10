@@ -31,7 +31,7 @@ Run `npm run daily:refresh-follow-ups` to rebuild stored daily follow-up text fr
 
 Run `npm run daily:regenerate -- --date=YYYY-MM-DD` to safely regenerate stored daily digests after verifying/fetching transcript text. This command fails closed if transcript grounding checks do not pass.
 
-Run `npm run backfill:grounded -- --force` to re-discover configured creator back catalogs, queue transcript-grounded reprocessing, regenerate daily digests from verified transcript text, and refresh affected weekly digests. Use `--dry-run` before a large run.
+Run `npm run backfill:grounded -- --force` to re-discover configured creator back catalogs, queue transcript-grounded reprocessing, regenerate daily digests from verified transcript text, and refresh affected weekly digests. Add `--since=YYYY-MM-DD --until=YYYY-MM-DD` for a bounded production run, and use `--dry-run` before a large run.
 
 Run `npm run weekly:refresh-research` to refresh the starter weekly archive with the curated date-scoped research notes used for the baseline "This Week in AI" editions.
 

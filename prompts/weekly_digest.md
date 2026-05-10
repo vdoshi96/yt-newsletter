@@ -42,6 +42,7 @@ Rules:
 - Prefer free docs, papers, free videos, search terms, exercises, and small projects.
 - Mark uncertainty and source limitations clearly.
 - Use dates in source notes.
+- For source notes tied to daily digests, set `label` to `Daily digest: <exact Title from SOURCE DIGESTS>`.
 - Do not recommend paid courses unless clearly marked optional.
 - If date-scoped external research notes are not supplied, say the external research layer is unavailable and keep market/investment claims conservative.
 - The podcast script should sound conversational and cautious, with two hosts discussing the week like a smart markets-and-AI show rather than reading bullets.

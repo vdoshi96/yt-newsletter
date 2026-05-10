@@ -81,4 +81,27 @@ describe("daily digest explanation structure", () => {
     expect(levels.advanced).toMatch(/level 3 explanation unavailable/i);
     expect(new Set(Object.values(levels)).size).toBe(3);
   });
+
+  it("normalizes provider skepticism note arrays without weakening grounding fields", () => {
+    const parsed = dailyDigestSchema.parse({
+      layout_type: "concept_explainer",
+      title: "Grounded agent systems",
+      dek: "A transcript-grounded digest.",
+      front_page_summary: "The transcript covered agents, evals, retrieval, and production checks.",
+      plain_english_explanation: "AI apps need careful checks.",
+      why_it_matters: "It helps readers avoid unsupported AI claims.",
+      what_creator_said: ["The creator says agents need evals."],
+      skepticism_notes: ["The transcript is partial.", "Verify important details."],
+      source_notes: [
+        {
+          quote: "production teams should add evals",
+          note: "The transcript discusses safeguards.",
+        },
+      ],
+    });
+
+    expect(parsed.skepticism_notes).toContain("The transcript is partial.");
+    expect(parsed.skepticism_notes).toContain("Verify important details.");
+    expect(parsed.transcript_grounding.transcript_source).toBe("legacy_digest_unverified");
+  });
 });

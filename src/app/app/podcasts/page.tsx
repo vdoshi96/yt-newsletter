@@ -32,6 +32,7 @@ type PodcastRow = {
   podcast_model: string | null;
   asset_provider: string | null;
   asset_model: string | null;
+  asset_generation_status: string | null;
 };
 
 export default async function PodcastsPage({
@@ -114,7 +115,9 @@ export default async function PodcastsPage({
 
 function PodcastArticle({ podcast }: { podcast: PodcastRow }) {
   const metadata = podcast.podcast_generation_metadata;
-  const status = podcast.public_url
+  const status = podcast.podcast_status === "failed" || podcast.asset_generation_status === "failed"
+    ? "failed"
+    : podcast.public_url
     ? "podcast_generated"
     : podcast.podcast_status ?? metadata?.status ?? "pending";
   const model = podcast.podcast_model ?? podcast.asset_model ?? metadata?.model ?? "unknown";
@@ -216,12 +219,16 @@ async function getPodcasts(userId: string, creatorId: string) {
       weekly_digests.podcast_model,
       assets.provider as asset_provider,
       assets.model as asset_model,
+      assets.generation_status as asset_generation_status,
       assets.public_url
     from weekly_digests
     join user_creators on user_creators.creator_id = weekly_digests.creator_id
     left join assets on assets.id = weekly_digests.podcast_audio_asset_id
     where user_creators.user_id = ${userId}
       and weekly_digests.creator_id = ${creatorId}
+      and weekly_digests.grounding_status = 'grounded'
+      and weekly_digests.processing_status = 'digest_generated'
+      and coalesce(weekly_digests.source_digest_count, 0) > 0
     order by weekly_digests.week_start desc
   `;
 }

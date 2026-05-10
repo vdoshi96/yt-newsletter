@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { getCreatorsForUser } from "@/lib/creators";
 import { getSql } from "@/lib/db";
 import { weeklyDigestSchema, type WeeklyDigestPayload } from "@/lib/digests/schemas";
+import { isFinalWeeklyDigestRow } from "@/lib/digests/rendering";
 import { ExplanationLevelPanel } from "@/components/explanation-level-panel";
 import { getCurrentSundayWeekStart, resolveSelectedWeekStart } from "@/lib/weekly/navigation";
 
@@ -34,10 +35,13 @@ export default async function WeeklyPage({
   const creators = await getCreatorsForUser(user.id);
   const creatorId = params.creatorId ?? creators[0]?.id;
   const digests = creatorId ? await getWeeklyDigests(user.id, creatorId) : [];
-  const availableWeeks = digests.map((digest) => digest.week_start);
+  const finalDigests = digests.filter(isFinalWeeklyDigestRow);
+  const availableWeeks = finalDigests.map((digest) => digest.week_start);
   const selectedWeekStart = resolveSelectedWeekStart(params.week, availableWeeks);
   const selectedDigest =
-    digests.find((digest) => digest.week_start === selectedWeekStart) ?? null;
+    finalDigests.find((digest) => digest.week_start === selectedWeekStart) ??
+    digests.find((digest) => digest.week_start === selectedWeekStart) ??
+    null;
   const currentWeekStart = getCurrentSundayWeekStart();
 
   return (
@@ -105,6 +109,9 @@ export default async function WeeklyPage({
 }
 
 function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creatorId: string }) {
+  if (!isFinalWeeklyDigestRow(digest)) {
+    return <BlockedWeeklyDigest digest={digest} />;
+  }
   const parsed = parseWeeklyDigestRow(digest);
   return (
     <article className="newspaper-sheet">
@@ -222,6 +229,40 @@ function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creator
         </ul>
       </section>
     </article>
+  );
+}
+
+function BlockedWeeklyDigest({ digest }: { digest: WeeklyRow }) {
+  return (
+    <section className="newspaper-sheet">
+      <p className="section-kicker">Weekly digest blocked</p>
+      <h3 className="mt-3 text-3xl font-black tracking-tight text-slate-950">
+        This week is waiting for grounded regeneration
+      </h3>
+      <p className="mt-3 max-w-2xl text-slate-600">
+        The dashboard is not rendering placeholder or pending weekly content as a final digest.
+      </p>
+      <dl className="mt-5 grid gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 md:grid-cols-2">
+        <div>
+          <dt className="font-bold">Week</dt>
+          <dd>
+            {digest.week_start} to {digest.week_end}
+          </dd>
+        </div>
+        <div>
+          <dt className="font-bold">Grounding</dt>
+          <dd>{digest.grounding_status ?? "pending"}</dd>
+        </div>
+        <div>
+          <dt className="font-bold">Source digests</dt>
+          <dd>{digest.source_digest_count ?? 0}</dd>
+        </div>
+        <div>
+          <dt className="font-bold">Model</dt>
+          <dd>{digest.generation_model ?? "not generated"}</dd>
+        </div>
+      </dl>
+    </section>
   );
 }
 

@@ -8,6 +8,7 @@ import {
   type DailyFollowUpDigest,
 } from "@/lib/digests/follow-up";
 import type { DailyDigestTranscriptRecord } from "@/lib/digests/grounding";
+import { isGroundedDailyDigestRow } from "@/lib/digests/rendering";
 import { filterDiscoveredMainVideos } from "@/lib/ingest/discovery-filter";
 import { selectVideoIdsNeedingIngestion } from "@/lib/ingest/discovery";
 import { loadPrompt } from "@/lib/prompts";
@@ -38,43 +39,70 @@ export async function processIngestQueue(
 ) {
   const sql = getSql();
   logIngest("queue-scan-started", { limit });
-  const items = await sql<QueueItem[]>`
-    select
-      ingest_job_items.id as item_id,
-      ingest_job_items.job_id,
-      ingest_jobs.creator_id,
-      videos.id as video_id,
-      videos.youtube_video_id,
-      videos.title,
-      videos.url,
-      videos.published_at
-    from ingest_job_items
-    join ingest_jobs on ingest_jobs.id = ingest_job_items.job_id
-    join videos on videos.id = ingest_job_items.video_id
-    where ingest_job_items.status = 'queued'
-       or (
-        ingest_job_items.status = 'waiting_for_transcript'
-        and exists (
-          select 1
-          from transcripts
-          where transcripts.video_id = videos.id
-            and transcripts.needs_retry = true
-            and transcripts.retry_after <= now()
+  const items = await sql.begin(async (transaction) => transaction<QueueItem[]>`
+    with candidates as (
+      select
+        ingest_job_items.id as item_id,
+        ingest_job_items.job_id,
+        ingest_jobs.creator_id,
+        videos.id as video_id,
+        videos.youtube_video_id,
+        videos.title,
+        videos.url,
+        videos.published_at
+      from ingest_job_items
+      join ingest_jobs on ingest_jobs.id = ingest_job_items.job_id
+      join videos on videos.id = ingest_job_items.video_id
+      where ingest_job_items.status = 'queued'
+         or (
+          ingest_job_items.status = 'waiting_for_transcript'
+          and exists (
+            select 1
+            from transcripts
+            where transcripts.video_id = videos.id
+              and transcripts.needs_retry = true
+              and transcripts.retry_after <= now()
+          )
         )
-      )
-       or (
-        ingest_job_items.status = 'failed'
-        and ingest_job_items.retry_count < ${RETRY_MAX_ATTEMPTS}
-        and (ingest_job_items.next_retry_at is null or ingest_job_items.next_retry_at <= now())
-      )
-       or (
-        ingest_job_items.status = 'processing'
-        and ingest_job_items.started_at < now() - make_interval(secs => ${RETRY_DELAY_SECONDS}::int)
-        and ingest_job_items.retry_count < ${RETRY_MAX_ATTEMPTS}
-      )
-    order by ingest_job_items.created_at asc
-    limit ${limit}
-  `;
+         or (
+          ingest_job_items.status = 'failed'
+          and ingest_job_items.retry_count < ${RETRY_MAX_ATTEMPTS}
+          and (ingest_job_items.next_retry_at is null or ingest_job_items.next_retry_at <= now())
+        )
+         or (
+          ingest_job_items.status = 'processing'
+          and ingest_job_items.started_at < now() - make_interval(secs => ${RETRY_DELAY_SECONDS}::int)
+          and ingest_job_items.retry_count < ${RETRY_MAX_ATTEMPTS}
+        )
+      order by ingest_job_items.created_at asc
+      limit ${limit}
+      for update of ingest_job_items skip locked
+    ),
+    claimed as (
+      update ingest_job_items
+      set
+        status = 'processing',
+        processing_status = 'pending',
+        validation_log = ${transaction.json({
+          event: "queue_item_claimed",
+          timestamp: new Date().toISOString(),
+        })},
+        started_at = coalesce(started_at, now()),
+        updated_at = now()
+      from candidates
+      where ingest_job_items.id = candidates.item_id
+      returning
+        candidates.item_id,
+        candidates.job_id,
+        candidates.creator_id,
+        candidates.video_id,
+        candidates.youtube_video_id,
+        candidates.title,
+        candidates.url,
+        candidates.published_at
+    )
+    select * from claimed
+  `);
 
   logIngest("queue-scan-finished", { discoveredItems: items.length, limit });
   let processed = 0;
@@ -235,6 +263,15 @@ async function processQueueItem(item: QueueItem, options: ProcessIngestQueueOpti
       videoId: item.video_id,
       message,
     });
+    await sql`
+      update daily_digests
+      set
+        grounding_status = 'failed',
+        processing_status = 'failed',
+        updated_at = now()
+      where video_id = ${item.video_id}
+        and grounding_status <> 'grounded'
+    `;
 
     const currentRows = await sql<Array<{ retry_count: number }>>`
       select retry_count from ingest_job_items where id = ${item.item_id}
@@ -391,12 +428,17 @@ export async function ensureTranscript(item: QueueItem) {
         null
       )
       on conflict (video_id, source) do update set
-        status = 'completed',
+        status = excluded.status,
         transcript_text = excluded.transcript_text,
         timed_segments = excluded.timed_segments,
-        derived_notes = null,
-        needs_retry = false,
-        retry_after = null,
+        derived_notes = excluded.derived_notes,
+        transcript_length = excluded.transcript_length,
+        source_hash = excluded.source_hash,
+        extraction_metadata = excluded.extraction_metadata,
+        extracted_at = excluded.extracted_at,
+        processing_status = excluded.processing_status,
+        needs_retry = excluded.needs_retry,
+        retry_after = excluded.retry_after,
         updated_at = now()
       returning
         id,
@@ -451,8 +493,15 @@ export async function ensureTranscript(item: QueueItem) {
       ${freeTranscript.retry_after}
     )
     on conflict (video_id, source) do update set
-      status = 'missing',
-      needs_retry = true,
+      status = excluded.status,
+      transcript_text = null,
+      timed_segments = null,
+      derived_notes = null,
+      transcript_length = excluded.transcript_length,
+      extraction_metadata = excluded.extraction_metadata,
+      extracted_at = excluded.extracted_at,
+      processing_status = excluded.processing_status,
+      needs_retry = excluded.needs_retry,
       retry_after = excluded.retry_after,
       updated_at = now()
   `;
@@ -471,15 +520,48 @@ export async function ensureDailyDigest(
   options: { forceRegenerate?: boolean } = {},
 ) {
   const sql = getSql();
-  const existing = await sql<{ id: string }[]>`
-    select id from daily_digests where video_id = ${item.video_id} limit 1
+  const existing = await sql<
+    Array<{
+      id: string;
+      grounding_status: string | null;
+      transcript_source: string | null;
+      transcript_length: number | null;
+      generation_model: string | null;
+      generated_at: string | null;
+      full_digest_json: unknown;
+    }>
+  >`
+    select
+      id,
+      grounding_status,
+      transcript_source,
+      transcript_length,
+      generation_model,
+      generated_at::text,
+      full_digest_json
+    from daily_digests
+    where video_id = ${item.video_id}
+    limit 1
   `;
-  if (existing[0] && !options.forceRegenerate) {
+  if (existing[0] && !options.forceRegenerate && isGroundedDailyDigestRow(existing[0])) {
     logIngest("daily-digest-existing", {
       videoId: item.video_id,
       digestId: existing[0].id,
+      groundingStatus: existing[0].grounding_status,
+      transcriptSource: existing[0].transcript_source,
+      transcriptLength: existing[0].transcript_length,
     });
     return existing[0].id;
+  }
+  if (existing[0] && !options.forceRegenerate) {
+    logIngest("daily-digest-existing-not-grounded", {
+      videoId: item.video_id,
+      digestId: existing[0].id,
+      groundingStatus: existing[0].grounding_status,
+      transcriptSource: existing[0].transcript_source,
+      transcriptLength: existing[0].transcript_length,
+      generationModel: existing[0].generation_model,
+    });
   }
 
   const prompt = await loadPrompt("daily_digest");

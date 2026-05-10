@@ -99,6 +99,22 @@ describe("daily digest transcript grounding", () => {
     expect(userContent).not.toContain("You're Wasting 40% Of Your AI Time");
   });
 
+  it("normalizes stored JSON transcript segments before building anchors", () => {
+    const messages = buildDailyDigestMessages({
+      prompt: "Return strict JSON.",
+      videoId: "video-1",
+      transcript: {
+        ...validTranscript,
+        timed_segments: JSON.stringify(validTranscript.timed_segments),
+      },
+      previousDailyContext: "No prior daily digest is available.",
+      minTranscriptCharacters: 100,
+    });
+
+    const userContent = messages.map((message) => message.content).join("\n");
+    expect(userContent).toContain("[00:00-00:00] Agents are software loops");
+  });
+
   it("fails generated digests without transcript excerpt grounding", () => {
     expect(() =>
       assertDailyDigestGrounding({
