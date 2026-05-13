@@ -7,6 +7,7 @@ import {
   type DailyFollowUpDigest,
 } from "@/lib/digests/follow-up";
 import type { DailyDigestTranscriptRecord } from "@/lib/digests/grounding";
+import { filterDiscoveredMainVideos } from "@/lib/ingest/discovery-filter";
 import { selectVideoIdsNeedingIngestion } from "@/lib/ingest/discovery";
 import { loadPrompt } from "@/lib/prompts";
 import { fetchFreeTranscript } from "@/lib/youtube/transcripts";
@@ -507,13 +508,16 @@ export async function checkCreatorsForNewVideos() {
         mod.discoverCreatorVideos(creator.channel_url, discoveryLimit),
       );
       videosDiscovered += discovery.videos.length;
+      const mainVideos = filterDiscoveredMainVideos(discovery.videos);
       logIngest("creator-discovery-finished", {
         creatorId: creator.id,
         discoveredVideos: discovery.videos.length,
+        mainVideos: mainVideos.length,
+        shortsFiltered: discovery.videos.length - mainVideos.length,
         warning: discovery.warning ?? null,
       });
       const discoveredVideoIds = await import("@/lib/creators").then((mod) =>
-        mod.upsertVideos(creator.id, discovery.videos),
+        mod.upsertVideos(creator.id, mainVideos),
       );
       const videoIdsToQueue = await getVideoIdsNeedingIngestion(discoveredVideoIds);
       if (videoIdsToQueue.length) {
