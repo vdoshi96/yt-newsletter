@@ -40,3 +40,7 @@ Last known local checks:
 
 - Local `DATABASE_URL` and `DIRECT_URL` authenticate after rebuilding their embedded password from `DATABASE_PASSWORD`.
 - If production still shows a Postgres auth error, refresh Vercel's `DATABASE_URL` with the same URL-encoded password value used locally, then redeploy.
+
+## Open Blockers
+
+- **2026-05-13 — Scheduled cron ingestion bug (partially fixed).** The immediate crash — duplicate-key error on `transcripts_video_source_unique` — is fixed in `src/lib/processor.ts` (both transcript INSERTs now use `ON CONFLICT … DO UPDATE`). Any `ingest_job_items` stuck in `failed` due to this error should be reset to `queued` with the SQL in the investigation doc. H1–H3 (Vercel plan schedule caps, `CRON_SECRET`, function timeout / no `maxDuration`) remain open; validate via the Vercel dashboard before closing. See [Cron Ingestion Investigation: 2026-05-13](../wiki/cron-ingestion-investigation-2026-05-13.md).

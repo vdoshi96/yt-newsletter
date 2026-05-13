@@ -1,5 +1,9 @@
 # Log
 
+## 2026-05-13 Cron Ingestion Investigation + Fix
+
+User reported the scheduled cron is not ingesting videos automatically. Investigation identified eight ranked hypotheses. Live error log then confirmed the immediate crash: both `INSERT INTO transcripts` statements in `ensureTranscript` (processor.ts) had no `ON CONFLICT` clause, so any retry after a `missing`-transcript insertion would hit the production `transcripts_video_source_unique` constraint and crash the item to `failed`. Fixed both INSERTs with `ON CONFLICT (video_id, source) DO UPDATE SET ...`. Added `supabase/migrations/002_transcripts_unique_source.sql` to formalize the constraint for fresh deploys. TypeScript clean, 124/124 tests passing. Items already in `failed` due to this bug can be reset with the SQL in the investigation doc. H1–H3 (cron schedule plan, CRON_SECRET, function timeout) remain open and should be validated via Vercel dashboard. See [docs/wiki/cron-ingestion-investigation-2026-05-13.md](../wiki/cron-ingestion-investigation-2026-05-13.md).
+
 ## 2026-05-09
 
 Initial local build session. Created the Next.js app, schema, auth, ingestion processor, UI pages, prompts, setup scripts, tests, and documentation. Migration and seed were blocked by invalid database credentials in `.env.local`.

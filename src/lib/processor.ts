@@ -238,6 +238,14 @@ async function ensureTranscript(item: QueueItem) {
         false,
         null
       )
+      on conflict (video_id, source) do update set
+        status = 'completed',
+        transcript_text = excluded.transcript_text,
+        timed_segments = excluded.timed_segments,
+        derived_notes = null,
+        needs_retry = false,
+        retry_after = null,
+        updated_at = now()
       returning
         id,
         video_id,
@@ -272,6 +280,11 @@ async function ensureTranscript(item: QueueItem) {
       true,
       ${freeTranscript.retry_after}
     )
+    on conflict (video_id, source) do update set
+      status = 'missing',
+      needs_retry = true,
+      retry_after = excluded.retry_after,
+      updated_at = now()
   `;
   logIngest("transcript-missing-recorded", {
     videoId: item.video_id,
