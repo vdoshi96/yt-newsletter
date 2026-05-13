@@ -106,6 +106,8 @@ create table if not exists ingest_job_items (
   error_message text,
   started_at timestamptz,
   completed_at timestamptz,
+  retry_count integer not null default 0,
+  next_retry_at timestamptz,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
   unique (job_id, video_id)
