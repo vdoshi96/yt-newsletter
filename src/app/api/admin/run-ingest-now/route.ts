@@ -4,6 +4,7 @@ import { processIngestQueue, refreshCreatorsAndProcessQueue } from "@/lib/proces
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   if (!requireCronSecret(request)) {
