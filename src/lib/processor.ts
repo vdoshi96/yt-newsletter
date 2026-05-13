@@ -111,7 +111,10 @@ async function countOpenItemsForCreator(creatorId: string) {
     from ingest_job_items
     join ingest_jobs on ingest_jobs.id = ingest_job_items.job_id
     where ingest_jobs.creator_id = ${creatorId}
-      and ingest_job_items.status in ('queued', 'processing', 'waiting_for_transcript', 'generating_digest', 'generating_assets')
+      and (
+        ingest_job_items.status in ('queued', 'processing', 'waiting_for_transcript', 'generating_digest', 'generating_assets')
+        or (ingest_job_items.status = 'failed' and ingest_job_items.completed_at is null)
+      )
   `;
   return rows[0]?.count ?? 0;
 }
@@ -647,7 +650,10 @@ async function getVideoIdsNeedingIngestion(videoIds: string[]) {
           select 1
           from ingest_job_items
           where video_id = ${videoId}
-            and status in ('queued', 'processing', 'waiting_for_transcript', 'generating_digest', 'generating_assets')
+            and (
+              status in ('queued', 'processing', 'waiting_for_transcript', 'generating_digest', 'generating_assets')
+              or (status = 'failed' and completed_at is null)
+            )
         ) as has_open_ingest_item
     `;
     candidates.push({
