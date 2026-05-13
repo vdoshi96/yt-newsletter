@@ -239,6 +239,42 @@ where status = 'failed'
 ```
 Then trigger a manual ingest run or wait for the next cron cycle.
 
+## Retry Mechanism (2026-05-13)
+
+H4 (no recovery path for stuck/failed items) is now fixed. The dequeue and error handling in `src/lib/processor.ts` recognize three retry-eligible states:
+
+1. `status = 'failed'` with `retry_count < INGEST_ITEM_MAX_RETRIES` and `next_retry_at <= now()` — covers generic provider/timeout errors and grounding failures (`creator claim is not supported by transcript vocabulary` and similar). These were previously terminal.
+2. `status = 'processing'` with `started_at < now() - INGEST_ITEM_RETRY_DELAY_SECONDS` and `retry_count < INGEST_ITEM_MAX_RETRIES` — auto-unsticks items that died mid-flight (timeout, crash before the `catch`).
+3. `status = 'waiting_for_transcript'` continues to use the existing `transcripts.needs_retry` + `transcripts.retry_after` path (unchanged).
+
+When `processQueueItem` catches an error, it reads the current `retry_count`. If `retry_count + 1 < INGEST_ITEM_MAX_RETRIES` it schedules a retry (`status = 'failed'`, `completed_at = null`, `next_retry_at = now() + delay`, increments `retry_count`); otherwise it writes `completed_at = now()` to mark the item terminally failed. The two cases emit `[ingest:item-retry-scheduled]` and `[ingest:item-retry-exhausted]` log lines respectively.
+
+When a recovered item is picked up, the existing "set to processing" UPDATE clears `next_retry_at` and resets `started_at = now()` so the stuck-`processing` window starts fresh for the new attempt.
+
+`syncJobCounts` was adjusted so the parent `ingest_jobs.status` no longer flips to `'completed'` while child items have pending retries scheduled (a `failed` item with `completed_at IS NULL` is treated as in-flight rather than terminal). `ingest_jobs.failed_count` now reflects only terminally-failed items.
+
+### Configuration
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `INGEST_ITEM_MAX_RETRIES` | `5` | Maximum number of attempts before an item becomes terminally failed. |
+| `INGEST_ITEM_RETRY_DELAY_SECONDS` | `3600` | Delay between attempts. Also doubles as the stuck-`processing` window. |
+
+### Schema additions
+
+`supabase/migrations/003_ingest_item_retry.sql` adds (idempotently) to `ingest_job_items`:
+
+- `retry_count integer not null default 0`
+- `next_retry_at timestamptz` (nullable)
+
+`supabase/migrations/001_initial_schema.sql` was updated to include the columns in the `create table` block for fresh deploys.
+
+### Files
+
+- `src/lib/processor.ts` — dequeue SQL, retry scheduling in catch, `syncJobCounts` semantics
+- `src/lib/ingest/retry.ts` — pure `shouldRetryItem` helper mirroring the SQL predicate
+- `tests/ingest-retry.test.ts` — covers the predicate's branches
+
 ## Open Questions
 
 - Which Vercel plan is the project on?

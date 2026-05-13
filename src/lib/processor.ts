@@ -23,6 +23,9 @@ type QueueItem = {
   published_at: string | Date | null;
 };
 
+const RETRY_MAX_ATTEMPTS = numberEnv("INGEST_ITEM_MAX_RETRIES", 5);
+const RETRY_DELAY_SECONDS = numberEnv("INGEST_ITEM_RETRY_DELAY_SECONDS", 3600);
+
 export async function processIngestQueue(limit = numberEnv("MAX_VIDEOS_PROCESSED_PER_CRON_RUN", 3)) {
   const sql = getSql();
   logIngest("queue-scan-started", { limit });
@@ -49,6 +52,16 @@ export async function processIngestQueue(limit = numberEnv("MAX_VIDEOS_PROCESSED
             and transcripts.needs_retry = true
             and transcripts.retry_after <= now()
         )
+      )
+       or (
+        ingest_job_items.status = 'failed'
+        and ingest_job_items.retry_count < ${RETRY_MAX_ATTEMPTS}
+        and (ingest_job_items.next_retry_at is null or ingest_job_items.next_retry_at <= now())
+      )
+       or (
+        ingest_job_items.status = 'processing'
+        and ingest_job_items.started_at < now() - make_interval(secs => ${RETRY_DELAY_SECONDS}::int)
+        and ingest_job_items.retry_count < ${RETRY_MAX_ATTEMPTS}
       )
     order by ingest_job_items.created_at asc
     limit ${limit}
@@ -117,7 +130,7 @@ async function processQueueItem(item: QueueItem) {
   `;
   await sql`
     update ingest_job_items
-    set status = 'processing', started_at = coalesce(started_at, now()), updated_at = now()
+    set status = 'processing', started_at = now(), next_retry_at = null, updated_at = now()
     where id = ${item.item_id}
   `;
 
@@ -165,17 +178,60 @@ async function processQueueItem(item: QueueItem) {
       videoId: item.video_id,
     });
   } catch (error) {
+    const message = (error as Error).message;
     console.error("[ingest:item-failed]", {
       itemId: item.item_id,
       jobId: item.job_id,
       videoId: item.video_id,
-      message: (error as Error).message,
+      message,
     });
-    await sql`
-      update ingest_job_items
-      set status = 'failed', error_message = ${(error as Error).message}, completed_at = now(), updated_at = now()
-      where id = ${item.item_id}
+
+    const currentRows = await sql<Array<{ retry_count: number }>>`
+      select retry_count from ingest_job_items where id = ${item.item_id}
     `;
+    const currentRetryCount = currentRows[0]?.retry_count ?? 0;
+    const nextRetryCount = currentRetryCount + 1;
+
+    if (nextRetryCount < RETRY_MAX_ATTEMPTS) {
+      await sql`
+        update ingest_job_items
+        set
+          status = 'failed',
+          error_message = ${message},
+          retry_count = ${nextRetryCount},
+          next_retry_at = now() + make_interval(secs => ${RETRY_DELAY_SECONDS}::int),
+          completed_at = null,
+          updated_at = now()
+        where id = ${item.item_id}
+      `;
+      logIngest("item-retry-scheduled", {
+        itemId: item.item_id,
+        jobId: item.job_id,
+        videoId: item.video_id,
+        retryCount: nextRetryCount,
+        maxAttempts: RETRY_MAX_ATTEMPTS,
+        retryDelaySeconds: RETRY_DELAY_SECONDS,
+      });
+    } else {
+      await sql`
+        update ingest_job_items
+        set
+          status = 'failed',
+          error_message = ${message},
+          retry_count = ${nextRetryCount},
+          next_retry_at = null,
+          completed_at = now(),
+          updated_at = now()
+        where id = ${item.item_id}
+      `;
+      logIngest("item-retry-exhausted", {
+        itemId: item.item_id,
+        jobId: item.job_id,
+        videoId: item.video_id,
+        retryCount: nextRetryCount,
+        maxAttempts: RETRY_MAX_ATTEMPTS,
+      });
+    }
   } finally {
     await syncJobCounts(item.job_id);
   }
@@ -450,13 +506,23 @@ function toJsonParameter(value: unknown) {
 
 async function syncJobCounts(jobId: string) {
   const sql = getSql();
+  // A `failed` item with `completed_at IS NULL` is retry-eligible and should
+  // not count as terminal — otherwise the parent job would flip to
+  // `completed` while items still have pending retries scheduled.
   const rows = await sql<
-    Array<{ total_count: number; processed_count: number; failed_count: number; waiting_count: number }>
+    Array<{
+      total_count: number;
+      processed_count: number;
+      failed_count: number;
+      pending_failed_count: number;
+      waiting_count: number;
+    }>
   >`
     select
       count(*)::int as total_count,
       count(*) filter (where status = 'completed')::int as processed_count,
-      count(*) filter (where status = 'failed')::int as failed_count,
+      count(*) filter (where status = 'failed' and completed_at is not null)::int as failed_count,
+      count(*) filter (where status = 'failed' and completed_at is null)::int as pending_failed_count,
       count(*) filter (where status = 'waiting_for_transcript')::int as waiting_count
     from ingest_job_items
     where job_id = ${jobId}
