@@ -167,7 +167,7 @@ export function buildTranscriptGroundingMetadata(input: {
   transcript: VerifiedDailyDigestTranscript;
   generationTimestamp: string;
   generationModel?: string;
-  sourceNotes?: Array<{ timestamp?: string; quote?: string; note: string }>;
+  sourceNotes?: Array<{ timestamp?: string | null; quote?: string; note: string }>;
   regeneratedAfterHallucinationFix?: boolean;
 }): TranscriptGroundingMetadata {
   const sourceNoteExcerpts =
@@ -175,7 +175,7 @@ export function buildTranscriptGroundingMetadata(input: {
       ?.filter((note) => note.quote?.trim())
       .slice(0, 6)
       .map((note) => ({
-        timestamp: note.timestamp,
+        timestamp: note.timestamp ?? undefined,
         quote: note.quote!.trim(),
         note: note.note,
       })) ?? [];
@@ -204,7 +204,7 @@ export function buildTranscriptGroundingMetadata(input: {
 export function assertDailyDigestGrounding(input: {
   transcriptText: string;
   digest: {
-    source_notes?: Array<{ timestamp?: string; quote?: string; note: string }>;
+    source_notes?: Array<{ timestamp?: string | null; quote?: string; note: string }>;
     what_creator_said?: string[];
   };
 }) {

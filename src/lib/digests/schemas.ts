@@ -28,7 +28,7 @@ const glossarySchema = z.object({
 });
 
 const sourceNoteSchema = z.object({
-  timestamp: z.string().optional(),
+  timestamp: z.string().nullish(),
   quote: z.string().optional(),
   note: z.string().min(1),
 });
@@ -51,7 +51,7 @@ const transcriptGroundingSchema = z.object({
   key_excerpts: z
     .array(
       z.object({
-        timestamp: z.string().optional(),
+        timestamp: z.string().nullish(),
         quote: z.string().min(1),
         note: z.string().min(1),
       }),
