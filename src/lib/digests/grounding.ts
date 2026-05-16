@@ -16,13 +16,16 @@ export type DailyDigestTranscriptRecord = {
   source: string;
   status: string;
   transcript_text: string | null;
-  timed_segments?: TranscriptSegment[] | null;
+  timed_segments?: TranscriptSegment[] | string | null;
   derived_notes?: unknown | null;
   created_at?: string | Date | null;
   updated_at?: string | Date | null;
 };
 
-export type VerifiedDailyDigestTranscript = DailyDigestTranscriptRecord & {
+export type VerifiedDailyDigestTranscript = Omit<
+  DailyDigestTranscriptRecord,
+  "source" | "status" | "transcript_text" | "timed_segments"
+> & {
   source: VerifiedTranscriptSource;
   status: "completed";
   transcript_text: string;
@@ -104,13 +107,14 @@ export function validateTranscriptForDailyDigest(input: {
   if (!sourceRecordedAt) {
     throw new Error("Verified transcript source timestamp is required before daily digest generation.");
   }
+  const timedSegments = normalizeTranscriptSegments(transcript.timed_segments);
 
   return {
     ...transcript,
     source: transcript.source,
     status: "completed",
     transcript_text: transcriptText,
-    timed_segments: transcript.timed_segments ?? [],
+    timed_segments: timedSegments,
     transcript_character_count: transcriptText.length,
     source_recorded_at: normalizeTimestamp(sourceRecordedAt),
   };
@@ -246,6 +250,38 @@ export function looksLikePlaceholderTranscript(text: string) {
 
 function isVerifiedTranscriptSource(source: string): source is VerifiedTranscriptSource {
   return VERIFIED_TRANSCRIPT_SOURCES.includes(source as VerifiedTranscriptSource);
+}
+
+function normalizeTranscriptSegments(
+  value: DailyDigestTranscriptRecord["timed_segments"],
+): TranscriptSegment[] {
+  const parsed = typeof value === "string" ? parseJsonArray(value) : value;
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed.flatMap((segment) => {
+    if (!segment || typeof segment !== "object") return [];
+    const record = segment as Partial<Record<keyof TranscriptSegment, unknown>>;
+    const text = typeof record.text === "string" ? record.text.trim() : "";
+    if (!text) return [];
+    const offset = Number(record.offset);
+    const duration = Number(record.duration);
+    return [
+      {
+        offset: Number.isFinite(offset) ? offset : 0,
+        duration: Number.isFinite(duration) ? duration : 0,
+        text,
+      },
+    ];
+  });
+}
+
+function parseJsonArray(value: string) {
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function formatTranscriptAnchors(segments: TranscriptSegment[]) {

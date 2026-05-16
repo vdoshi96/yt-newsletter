@@ -17,6 +17,24 @@ Manual verification paths:
 
 Logs are emitted around creator discovery, transcript fetch, summarization, database writes, and UI availability. Search platform logs for the `[ingest:*]` prefix.
 
+Back-catalog regeneration uses:
+
+```bash
+npm run backfill:grounded -- --force
+```
+
+Useful flags:
+
+- `--dry-run`: discover and report what would be queued without writing jobs.
+- `--limit=N`: discovery lookback per creator; default `BACKFILL_VIDEO_LOOKBACK_LIMIT=500`.
+- `--since=YYYY-MM-DD` and `--until=YYYY-MM-DD`: limit processing and weekly refreshes to a published-at date window.
+- `BACKFILL_MIN_VIDEO_DURATION_SECONDS`: ignores Shorts/short clips before queueing; default `300`.
+- `--process-limit=N`: queue items to process per loop; default `BACKFILL_PROCESS_LIMIT=25`.
+- `--creator-id=<uuid>`: limit the run to one configured creator.
+- `--queue-only`: queue selected videos without draining the processor.
+
+The command skips already grounded daily digests unless `--force` is passed. It does not use titles as a fallback: videos without verified transcript text stay incomplete or waiting for transcript retry.
+
 ## Daily Transcript Grounding
 
 Daily digests must never be generated from title-only, metadata-only, stale placeholder, or model-derived video notes. The hard gate before LLM generation requires:
@@ -29,6 +47,8 @@ Daily digests must never be generated from title-only, metadata-only, stale plac
 - a recorded transcript source timestamp.
 
 If transcript extraction fails, the ingest item waits for the transcript retry window instead of publishing a digest. The daily prompt excludes the video title and forbids title, description, thumbnail, channel metadata, prior knowledge, or search results as evidence. The post-generation check requires quote anchors that appear in the transcript.
+
+Stored transcript/digest metadata includes transcript length, transcript source hash, extraction metadata, extraction timestamp, generation model, generation timestamp, grounding status, source references, and processing status. The canonical processing states are `pending`, `transcript_missing`, `transcript_ready`, `digest_generated`, `podcast_generated`, and `failed`.
 
 To safely regenerate a date after a grounding issue:
 
@@ -48,7 +68,7 @@ Daily and weekly prompts require visibly different explanation depths. Daily dig
 
 The skepticism section must not use the phrase "AI-derived notes from YouTube transcripts." Stored digests are also cleaned at parse time so older rows do not keep showing that wording.
 
-Weekly prompts now ask for more substantial `market_investment_lens` and `research_briefs`. The local weekly fallback also returns longer market and research text so fallback editions are useful without pretending to have external research.
+Weekly digests use Saturday-through-Friday windows, so the edition that appears Saturday morning covers the previous weekend plus Monday through Friday. Weekly prompts synthesize daily digests instead of concatenating them, include transcript quote anchors in the weekly source text, and ask for major themes, recurring concepts, practical takeaways, unresolved questions, `market_investment_lens`, and `research_briefs`. The local weekly fallback remains conservative and does not pretend to have external research.
 
 ## Podcast Generation
 
@@ -56,7 +76,7 @@ Weekly podcast scripts are generated as a long-form two-host deep dive from the 
 
 Configuration:
 
-- `PODCAST_SCRIPT_TARGET_MINUTES` controls script length target. Default: `8`.
+- `PODCAST_SCRIPT_TARGET_MINUTES` controls script length target. Default: `30`.
 - `PODCAST_SCRIPT_WORDS_PER_MINUTE` controls word target math. Default: `145`.
 - `PODCAST_GENERATION_MODE` defaults to `two_host_deep_dive`.
 - `PODCAST_TTS_PROVIDER` defaults to `gemini_flash`.
@@ -65,14 +85,21 @@ Configuration:
 - `PODCAST_FEMALE_VOICE` / `PODCAST_MALE_VOICE` only apply to the optional Qwen voice-designed path.
 - `PODCAST_AUDIO_BITRATE` controls MP3 export bitrate for `npm run podcasts:generate`. Default: `128k`.
 
-`npm run podcasts:generate` is the preferred high-quality path because it uses Gemini Flash native multi-speaker TTS by default and stores an MP3 in Supabase. Inline weekly generation skips audio unless `PODCAST_TTS_PROVIDER=qwen_simple`, which avoids accidentally producing a single-voice default TTS file.
+`npm run podcasts:generate` is the preferred high-quality path because it uses Gemini Flash native multi-speaker TTS by default and stores an MP3 in Supabase. By default it selects up to four Sunday-ready weekly podcasts; use `--limit=N`, `--week=YYYY-MM-DD`, `--force`, or `--include-not-ready` when backfilling. Podcast metadata stores provider, model, cast/voice config, target minutes, word count, source references, generation status, and failures.
 
 NotebookLM currently has no stable app API for automated generation from this app. Treat NotebookLM as a manual external production option; the automated path here is the best feasible stack-native alternative.
 
 ## Weekly Calendar and Story Links
 
-Weekly digest and podcast pages accept `week=YYYY-MM-DD`. Any selected date is normalized to the app's Sunday-to-Saturday week start. If no week is supplied, the pages select the latest stored week and fall back to the current Sunday.
+Weekly digest and podcast pages accept `week=YYYY-MM-DD`. Any selected date is normalized to the app's Saturday-through-Friday week start. If no week is supplied, the pages select the latest stored week and fall back to the current Saturday.
 
 Both weekly pages include a `Jump to current` control. If no digest or podcast exists for the selected week, the page shows an empty state instead of rendering the wrong archive item.
 
 Weekly story cards link to `/app/daily?creatorId=...&date=...` using the story date. If no daily digest exists for that date, the daily page shows its existing empty state.
+
+## Known Failure Modes
+
+- Missing or short transcripts produce `transcript_missing` and no final digest.
+- Provider JSON/schema failures prevent daily or weekly writes until a valid grounded payload is produced.
+- Weekly market context stays conservative unless date-scoped external research notes are supplied.
+- Podcast audio can fail because of missing TTS credentials, provider errors, Supabase Storage errors, or local `ffmpeg` failures. The UI shows the failure state instead of treating missing audio as final content.

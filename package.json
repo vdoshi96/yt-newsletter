@@ -15,6 +15,7 @@
     "seed:baseline": "tsx scripts/seed-baseline-month.ts",
     "seed": "npm run seed:user && npm run seed:creator",
     "ingest:process": "tsx scripts/process-ingest.ts",
+    "backfill:grounded": "tsx scripts/backfill-grounded-catalog.ts",
     "daily:regenerate": "tsx scripts/regenerate-daily-digest.ts",
     "daily:refresh-follow-ups": "tsx scripts/refresh-daily-follow-ups.ts",
     "weekly:refresh-research": "tsx scripts/refresh-weekly-research.ts",

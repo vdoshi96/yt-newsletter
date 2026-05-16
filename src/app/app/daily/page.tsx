@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { getCreatorsForUser } from "@/lib/creators";
 import { dailyDigestSchema } from "@/lib/digests/schemas";
 import { getDailyVideoPickerState } from "@/lib/digests/selection";
+import { isGroundedDailyDigestRow } from "@/lib/digests/rendering";
 import { getSql } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,12 @@ type DailyRow = {
   digest_date: string;
   title: string;
   video_title: string | null;
+  grounding_status: string | null;
+  processing_status: string | null;
+  transcript_source: string | null;
+  transcript_length: number | null;
+  generation_model: string | null;
+  generated_at: string | null;
   full_digest_json: unknown;
 };
 
@@ -40,7 +47,9 @@ export default async function DailyPage({
   const dateDigests = digests.filter((digest) => digest.digest_date === selectedDate);
   const selected =
     dateDigests.find((digest) => digest.video_id === params.videoId) ?? dateDigests[0] ?? null;
-  const parsed = selected ? dailyDigestSchema.parse(selected.full_digest_json) : null;
+  const selectedIsGrounded = selected ? isGroundedDailyDigestRow(selected) : false;
+  const parsed =
+    selected && selectedIsGrounded ? dailyDigestSchema.parse(selected.full_digest_json) : null;
 
   return (
     <div className="space-y-6">
@@ -100,6 +109,8 @@ export default async function DailyPage({
 
       {parsed ? (
         <DigestRenderer digest={parsed} />
+      ) : selected ? (
+        <BlockedDailyDigest digest={selected} />
       ) : (
         <EmptyPage
           title="No daily digest for this date"
@@ -108,6 +119,39 @@ export default async function DailyPage({
         />
       )}
     </div>
+  );
+}
+
+function BlockedDailyDigest({ digest }: { digest: DailyRow }) {
+  return (
+    <section className="newspaper-sheet">
+      <p className="section-kicker">Digest blocked</p>
+      <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-950">
+        This stored daily row needs grounded regeneration
+      </h2>
+      <p className="mt-3 max-w-2xl text-slate-600">
+        The app is not showing this as final content because the row is missing verified transcript
+        grounding metadata or does not meet the transcript threshold.
+      </p>
+      <dl className="mt-5 grid gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 md:grid-cols-2">
+        <div>
+          <dt className="font-bold">Status</dt>
+          <dd>{digest.processing_status ?? digest.grounding_status ?? "pending"}</dd>
+        </div>
+        <div>
+          <dt className="font-bold">Transcript source</dt>
+          <dd>{digest.transcript_source ?? "missing"}</dd>
+        </div>
+        <div>
+          <dt className="font-bold">Transcript length</dt>
+          <dd>{(digest.transcript_length ?? 0).toLocaleString()} characters</dd>
+        </div>
+        <div>
+          <dt className="font-bold">Model</dt>
+          <dd>{digest.generation_model ?? "not generated"}</dd>
+        </div>
+      </dl>
+    </section>
   );
 }
 
@@ -136,6 +180,12 @@ async function getDailyDigests(userId: string, creatorId: string) {
       daily_digests.digest_date::text as digest_date,
       daily_digests.title,
       videos.title as video_title,
+      daily_digests.grounding_status,
+      daily_digests.processing_status,
+      daily_digests.transcript_source,
+      daily_digests.transcript_length,
+      daily_digests.generation_model,
+      daily_digests.generated_at::text as generated_at,
       daily_digests.full_digest_json
     from daily_digests
     join videos on videos.id = daily_digests.video_id

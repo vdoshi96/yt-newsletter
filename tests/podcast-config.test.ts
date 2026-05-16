@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getPodcastAudioConfig } from "../src/lib/podcasts/config";
+import {
+  getPodcastAudioConfig,
+  getPodcastScriptConfig,
+  getPodcastTargetWordCount,
+} from "../src/lib/podcasts/config";
 
 describe("podcast audio config", () => {
   afterEach(() => {
@@ -15,6 +19,19 @@ describe("podcast audio config", () => {
       provider: "gemini_flash",
       ttsModel: "gemini-2.5-flash-preview-tts",
     });
+  });
+
+  it("defaults weekly podcast scripts to roughly thirty minutes", () => {
+    vi.stubEnv("PODCAST_SCRIPT_TARGET_MINUTES", "");
+    vi.stubEnv("PODCAST_SCRIPT_WORDS_PER_MINUTE", "");
+
+    const config = getPodcastScriptConfig();
+
+    expect(config).toMatchObject({
+      targetMinutes: 30,
+      wordsPerMinute: 145,
+    });
+    expect(getPodcastTargetWordCount(config)).toBeGreaterThanOrEqual(4300);
   });
 
   it("keeps Qwen model selection when the Qwen provider is explicit", () => {

@@ -24,7 +24,7 @@ export type PodcastAudioConfig = {
 
 export function getPodcastScriptConfig(): PodcastScriptConfig {
   return {
-    targetMinutes: numberEnv("PODCAST_SCRIPT_TARGET_MINUTES", 8),
+    targetMinutes: numberEnv("PODCAST_SCRIPT_TARGET_MINUTES", 30),
     wordsPerMinute: numberEnv("PODCAST_SCRIPT_WORDS_PER_MINUTE", 145),
     generationMode: parseGenerationMode(process.env.PODCAST_GENERATION_MODE),
   };

@@ -19,7 +19,7 @@ async function main() {
   });
 
   console.log(
-    `Queued one-month baseline for Nate B. Jones: ${result.videoCount} video(s), 4 weekly digest slots.`,
+    `Queued completed-week baseline for Nate B. Jones: ${result.videoCount} video(s), 4 weekly digest slots.`,
   );
 
   if (process.argv.includes("--process")) {

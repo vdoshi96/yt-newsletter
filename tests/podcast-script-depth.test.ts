@@ -107,6 +107,6 @@ describe("weekly podcast script depth", () => {
 
     expect(script).toContain("Practical takeaways");
     expect(script).toContain("Closing");
-    expect(script.split(/\s+/).filter(Boolean).length).toBeGreaterThan(850);
+    expect(script.split(/\s+/).filter(Boolean).length).toBeGreaterThan(4000);
   });
 });

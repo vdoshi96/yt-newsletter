@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CheckCircle2, Plus } from "lucide-react";
+import { AlertCircle, CheckCircle2, Plus } from "lucide-react";
 import { requireUser } from "@/lib/auth/current-user";
 import { getIngestJobsForUser } from "@/lib/creators";
 import { summarizeJobProgress } from "@/lib/jobs/progress";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ started?: string; processed?: string; warning?: string }>;
+  searchParams: Promise<{ started?: string; processed?: string; queued?: string; warning?: string }>;
 }) {
   const user = await requireUser();
   const [jobs, params] = await Promise.all([getIngestJobsForUser(user.id), searchParams]);
@@ -31,6 +31,11 @@ export default async function JobsPage({
         {params.processed ? (
           <p className="mt-5 rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-800">
             Processor handled {params.processed} queue item(s).
+          </p>
+        ) : null}
+        {params.queued ? (
+          <p className="mt-5 rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-800">
+            Queued {params.queued} new item(s).
           </p>
         ) : null}
         {params.warning ? (
@@ -83,7 +88,11 @@ export default async function JobsPage({
                   <p>Total: {job.total_count}</p>
                   <p>Processed: {job.processed_count}</p>
                   <p className="inline-flex items-center gap-1">
-                    <CheckCircle2 aria-hidden className="size-4 text-emerald-600" />
+                    {job.failed_count > 0 ? (
+                      <AlertCircle aria-hidden className="size-4 text-red-600" />
+                    ) : (
+                      <CheckCircle2 aria-hidden className="size-4 text-emerald-600" />
+                    )}
                     Failed: {job.failed_count}
                   </p>
                 </div>

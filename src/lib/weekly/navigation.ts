@@ -1,7 +1,11 @@
-import { getSundayToSaturdayWeekRange } from "./week-range";
+import { getSaturdayToFridayWeekRange } from "./week-range";
 
 export function getCurrentSundayWeekStart(now = new Date()) {
-  return getSundayToSaturdayWeekRange(now).weekStart;
+  return getCurrentWeeklyWindowStart(now);
+}
+
+export function getCurrentWeeklyWindowStart(now = new Date()) {
+  return getSaturdayToFridayWeekRange(now).weekStart;
 }
 
 export function resolveSelectedWeekStart(
@@ -10,8 +14,8 @@ export function resolveSelectedWeekStart(
   now = new Date(),
 ) {
   if (selected) {
-    return getSundayToSaturdayWeekRange(selected).weekStart;
+    return getSaturdayToFridayWeekRange(selected).weekStart;
   }
 
-  return [...availableWeekStarts].sort().at(-1) ?? getCurrentSundayWeekStart(now);
+  return [...availableWeekStarts].sort().at(-1) ?? getCurrentWeeklyWindowStart(now);
 }

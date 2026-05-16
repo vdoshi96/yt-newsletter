@@ -13,10 +13,22 @@ import {
   type PodcastHostCast,
   type PodcastHostKey,
 } from "@/lib/podcasts/two-host";
-import { getPodcastAudioConfig } from "@/lib/podcasts/config";
+import { getPodcastAudioConfig, getPodcastScriptConfig } from "@/lib/podcasts/config";
 import { uploadGeneratedAsset } from "@/lib/supabase/storage";
+import { isWeeklyPodcastReady } from "@/lib/weekly/week-range";
 
 const audioConfig = getPodcastAudioConfig();
+const scriptConfig = getPodcastScriptConfig();
+const args = new Map(
+  process.argv
+    .slice(2)
+    .map((arg) => {
+      const [key, ...rest] = arg.split("=");
+      return [key, rest.join("=") || "true"];
+    })
+    .filter(([key]) => key.startsWith("--"))
+    .map(([key, value]) => [key.replace(/^--/, ""), value]),
+);
 const customizationUrl =
   process.env.QWEN_VOICE_DESIGN_ENDPOINT ??
   "https://dashscope-intl.aliyuncs.com/api/v1/services/audio/tts/customization";
@@ -41,6 +53,8 @@ type WeeklyDigestRow = {
   week_end: string;
   title: string;
   full_digest_json: unknown;
+  podcast_audio_asset_id: string | null;
+  podcast_status: string | null;
 };
 
 type HostVoice = {
@@ -54,7 +68,7 @@ async function main() {
     provider === "gemini_flash"
       ? optionalEnv("GEMINI_API_KEY")
       : optionalEnv("DASHSCOPE_API_KEY") ?? optionalEnv("QWEN_API_KEY");
-  if (!apiKey) {
+  if (provider !== "external_manual" && !apiKey) {
     throw new Error(
       provider === "gemini_flash"
         ? "GEMINI_API_KEY is required."
@@ -70,7 +84,12 @@ async function main() {
     }
 
     for (const row of rows) {
-      await generatePodcastForWeek({ apiKey, row });
+      try {
+        await generatePodcastForWeek({ apiKey: apiKey ?? "", row });
+      } catch (error) {
+        await markPodcastFailed(row.id, (error as Error).message);
+        console.error(`Podcast generation failed for ${row.week_start}: ${(error as Error).message}`);
+      }
     }
   } finally {
     await closeSql();
@@ -79,11 +98,37 @@ async function main() {
 
 async function getWeeklyDigests() {
   const sql = getSql();
-  return sql<WeeklyDigestRow[]>`
-    select id, creator_id, week_start::text, week_end::text, title, full_digest_json
+  const force = args.has("force");
+  const includeNotReady = args.has("include-not-ready");
+  const week = args.get("week");
+  const limit = numericArg("limit", 4);
+  const rows = await sql<WeeklyDigestRow[]>`
+    select
+      id,
+      creator_id,
+      week_start::text,
+      week_end::text,
+      title,
+      full_digest_json,
+      podcast_audio_asset_id,
+      podcast_status
     from weekly_digests
+    where (${week ?? null}::date is null or week_start = ${week ?? null}::date)
+      and grounding_status = 'grounded'
+      and processing_status = 'digest_generated'
+      and coalesce(source_digest_count, 0) > 0
+      and generation_model is not null
+      and generated_at is not null
     order by week_start desc
   `;
+  return rows
+    .filter((row) => force || !row.podcast_audio_asset_id || row.podcast_status === "failed")
+    .filter((row) =>
+      includeNotReady
+        ? true
+        : isWeeklyPodcastReady({ weekStart: row.week_start, weekEnd: row.week_end }),
+    )
+    .slice(0, limit);
 }
 
 async function getPodcastVoices(
@@ -151,8 +196,32 @@ async function generatePodcastForWeek(input: {
 }) {
   const digest = weeklyDigestSchema.parse(input.row.full_digest_json);
   const cast = getPodcastCastForWeek(input.row.week_start);
-  const lines = buildTwoHostPodcastLines(digest, undefined, cast);
+  const lines = buildTwoHostPodcastLines(digest, scriptConfig, cast);
   const script = formatTwoHostPodcastScript(lines);
+  const wordCount = countWords(script);
+  const voiceConfig = buildVoiceConfig(cast);
+  const sourceReferences = digest.source_references.length
+    ? digest.source_references
+    : digest.source_notes.map((note) => ({
+        date: note.date,
+        label: note.label,
+        url: note.url,
+        note: note.note,
+      }));
+
+  if (audioConfig.provider === "external_manual") {
+    await savePodcastScriptOnly({
+      row: input.row,
+      script,
+      wordCount,
+      cast,
+      sourceReferences,
+      voiceConfig,
+    });
+    console.log(`Stored external-manual podcast script for ${input.row.week_start}.`);
+    return;
+  }
+
   const workDir = path.join(tmpdir(), `yt-newsletter-podcast-${randomUUID()}`);
   await mkdir(workDir, { recursive: true });
 
@@ -202,8 +271,12 @@ async function generatePodcastForWeek(input: {
       storagePath,
       publicUrl,
       characterCount,
+      wordCount,
       provider,
       model,
+      cast,
+      sourceReferences,
+      voiceConfig,
       estimatedCostUsd: estimateAudioCostUsd(provider, characterCount),
     });
     console.log(
@@ -379,11 +452,16 @@ async function savePodcastAsset(input: {
   storagePath: string;
   publicUrl: string;
   characterCount: number;
+  wordCount: number;
   provider: string;
   model: string;
+  cast: PodcastHostCast;
+  sourceReferences: Array<Record<string, unknown>>;
+  voiceConfig: Record<string, unknown>;
   estimatedCostUsd: number;
 }) {
   const sql = getSql();
+  const generationMetadata = buildPodcastGenerationMetadata(input);
   const assets = await sql<{ id: string }[]>`
     insert into assets (
       creator_id,
@@ -393,7 +471,10 @@ async function savePodcastAsset(input: {
       model,
       prompt,
       storage_path,
-      public_url
+      public_url,
+      generation_status,
+      generation_metadata,
+      source_references
     )
     values (
       ${input.row.creator_id},
@@ -403,8 +484,23 @@ async function savePodcastAsset(input: {
       ${input.model},
       ${input.script.slice(0, 2000)},
       ${input.storagePath},
-      ${input.publicUrl}
+      ${input.publicUrl},
+      'podcast_generated',
+      ${sql.json(toJsonParameter(generationMetadata))},
+      ${sql.json(toJsonParameter(input.sourceReferences))}
     )
+    on conflict (storage_path) do update set
+      creator_id = excluded.creator_id,
+      weekly_digest_id = excluded.weekly_digest_id,
+      asset_type = excluded.asset_type,
+      provider = excluded.provider,
+      model = excluded.model,
+      prompt = excluded.prompt,
+      public_url = excluded.public_url,
+      generation_status = excluded.generation_status,
+      generation_metadata = excluded.generation_metadata,
+      source_references = excluded.source_references,
+      created_at = now()
     returning id
   `;
   await sql`
@@ -412,6 +508,12 @@ async function savePodcastAsset(input: {
     set
       podcast_script = ${input.script},
       podcast_audio_asset_id = ${assets[0].id},
+      podcast_status = 'podcast_generated',
+      podcast_generation_metadata = ${sql.json(toJsonParameter(generationMetadata))},
+      podcast_generated_at = now(),
+      podcast_model = ${input.model},
+      podcast_voice_config = ${sql.json(toJsonParameter(input.voiceConfig))},
+      source_references = ${sql.json(toJsonParameter(input.sourceReferences))},
       updated_at = now()
     where id = ${input.row.id}
   `;
@@ -437,6 +539,98 @@ async function savePodcastAsset(input: {
       ${input.estimatedCostUsd}
     )
   `;
+}
+
+async function savePodcastScriptOnly(input: {
+  row: WeeklyDigestRow;
+  script: string;
+  wordCount: number;
+  cast: PodcastHostCast;
+  sourceReferences: Array<Record<string, unknown>>;
+  voiceConfig: Record<string, unknown>;
+}) {
+  const sql = getSql();
+  await sql`
+    update weekly_digests
+    set
+      podcast_script = ${input.script},
+      podcast_status = 'pending',
+      podcast_generation_metadata = ${sql.json(toJsonParameter({
+        status: "script_generated",
+        target_minutes: scriptConfig.targetMinutes,
+        words_per_minute: scriptConfig.wordsPerMinute,
+        word_count: input.wordCount,
+        provider: "external_manual",
+        model: "external_manual",
+        cast_id: input.cast.id,
+        generated_at: new Date().toISOString(),
+        voice_config: input.voiceConfig,
+        source_references: input.sourceReferences,
+      }))},
+      podcast_voice_config = ${sql.json(toJsonParameter(input.voiceConfig))},
+      source_references = ${sql.json(toJsonParameter(input.sourceReferences))},
+      updated_at = now()
+    where id = ${input.row.id}
+  `;
+}
+
+async function markPodcastFailed(weeklyDigestId: string, message: string) {
+  const sql = getSql();
+  await sql`
+    update weekly_digests
+    set
+      podcast_audio_asset_id = null,
+      podcast_status = 'failed',
+      podcast_generated_at = null,
+      podcast_model = null,
+      podcast_generation_metadata = coalesce(podcast_generation_metadata, '{}'::jsonb) ||
+        ${sql.json(toJsonParameter({
+          status: "failed",
+          error_message: message,
+          failed_at: new Date().toISOString(),
+        }))}::jsonb,
+      updated_at = now()
+    where id = ${weeklyDigestId}
+  `;
+}
+
+function buildPodcastGenerationMetadata(input: {
+  wordCount: number;
+  provider: string;
+  model: string;
+  cast: PodcastHostCast;
+  voiceConfig: Record<string, unknown>;
+  sourceReferences: Array<Record<string, unknown>>;
+}) {
+  return {
+    status: "podcast_generated",
+    target_minutes: scriptConfig.targetMinutes,
+    words_per_minute: scriptConfig.wordsPerMinute,
+    word_count: input.wordCount,
+    provider: input.provider,
+    model: input.model,
+    cast_id: input.cast.id,
+    generated_at: new Date().toISOString(),
+    voice_config: input.voiceConfig,
+    source_references: input.sourceReferences,
+  };
+}
+
+function buildVoiceConfig(cast: PodcastHostCast) {
+  return {
+    provider: audioConfig.provider,
+    cast_id: cast.id,
+    hosts: {
+      primary: {
+        name: cast.hosts.primary.name,
+        geminiVoice: cast.hosts.primary.geminiVoice,
+      },
+      secondary: {
+        name: cast.hosts.secondary.name,
+        geminiVoice: cast.hosts.secondary.geminiVoice,
+      },
+    },
+  };
 }
 
 function estimateAudioCostUsd(provider: string, characterCount: number) {
@@ -468,6 +662,19 @@ function optionalEnv(name: string) {
 function numberEnv(name: string, fallback: number) {
   const value = Number(process.env[name]);
   return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function numericArg(name: string, fallback: number) {
+  const value = Number(args.get(name));
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function countWords(text: string) {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+function toJsonParameter(value: unknown) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 main().catch((error) => {

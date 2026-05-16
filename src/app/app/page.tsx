@@ -72,15 +72,19 @@ export default async function AppHome() {
             <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-3">
-                  <CheckCircle2 aria-hidden className="mt-1 size-8 shrink-0 text-emerald-600" />
+                    <CheckCircle2 aria-hidden className="mt-1 size-8 shrink-0 text-emerald-600" />
                   <div>
-                    <h3 className="text-lg font-black text-slate-950">Latest job completed</h3>
+                    <h3 className="text-lg font-black text-slate-950">
+                      Latest job {latestJob.status.replace(/_/g, " ")}
+                    </h3>
                     <p className="mt-1 text-sm font-medium text-slate-700">
                       {latestJob.creator_title ?? "Creator"}
                     </p>
                   </div>
                 </div>
-                <p className="text-sm font-bold capitalize text-emerald-700">{latestJob.status}</p>
+                <p className={`text-sm font-bold capitalize ${statusTextClass(latestJob.status)}`}>
+                  {latestJob.status.replace(/_/g, " ")}
+                </p>
               </div>
               <div className="mt-4 flex items-center gap-3">
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
@@ -115,8 +119,9 @@ export default async function AppHome() {
           <h3 className="section-kicker">Starter creator</h3>
           <p className="mt-2 text-2xl font-black text-slate-950">Nate B. Jones</p>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Seeded as the first creator. The baseline run queues the past 28 days of
-            videos, starts with four weekly editions, and keeps future weeks as an archive.
+            Seeded as the first creator. The baseline run queues the four most recent
+            completed Saturday-through-Friday weeks, starts with four weekly editions,
+            and keeps future weeks as an archive.
           </p>
           <Link className="mt-5 inline-flex btn-secondary" href="/app/creators">
             Start a backfill
@@ -128,7 +133,8 @@ export default async function AppHome() {
           <p className="mt-2 text-2xl font-black text-slate-950">Source-grounded editions</p>
           <p className="mt-3 text-sm leading-6 text-slate-600">
             Daily and weekly views preserve the same records while giving you controls for
-            dates, weeks, explanation depth, podcast scripts, and operational refreshes.
+            dates, Saturday-through-Friday weeks, explanation depth, podcast scripts, and
+            operational refreshes.
           </p>
           <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
             <div
@@ -223,6 +229,27 @@ function DailyPreview({ preview }: { preview: DailyPreviewRow | null }) {
         <p className="mt-2 text-sm text-slate-500">
           {preview.digest_date} · {formatCreatorTitle(preview.creator_title)}
         </p>
+        <dl className="mt-4 grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-2">
+          <div>
+            <dt className="font-bold text-slate-950">Generated</dt>
+            <dd>{preview.generated_at ?? "unknown"}</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-950">Model</dt>
+            <dd>{preview.generation_model ?? "unknown"}</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-950">Grounding</dt>
+            <dd>{preview.grounding_status ?? "pending"}</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-950">Transcript</dt>
+            <dd>
+              {preview.transcript_source ?? "missing"} /{" "}
+              {(preview.transcript_length ?? 0).toLocaleString()} chars
+            </dd>
+          </div>
+        </dl>
       </div>
 
       <div className="mt-5 border-t border-slate-200 pt-4">
@@ -295,9 +322,11 @@ function RecentActivity({ activity }: { activity: ActivityRow[] }) {
                     {item.detail ?? "Stored update"}
                   </td>
                   <td className="py-3">
-                    <span className="inline-flex items-center gap-1 whitespace-nowrap font-bold capitalize text-emerald-700">
+                    <span
+                      className={`inline-flex items-center gap-1 whitespace-nowrap font-bold capitalize ${statusTextClass(item.status)}`}
+                    >
                       <CheckCircle2 aria-hidden className="size-4" />
-                      {item.status}
+                      {item.status.replace(/_/g, " ")}
                     </span>
                   </td>
                 </tr>
@@ -326,12 +355,14 @@ async function getDashboardStats(userId: string) {
         from daily_digests
         join user_creators on user_creators.creator_id = daily_digests.creator_id
         where user_creators.user_id = ${userId}
+          and daily_digests.grounding_status = 'grounded'
       ) as daily_count,
       (
         select count(*)::int
         from weekly_digests
         join user_creators on user_creators.creator_id = weekly_digests.creator_id
         where user_creators.user_id = ${userId}
+          and weekly_digests.grounding_status = 'grounded'
       ) as weekly_count
   `;
   return {
@@ -355,6 +386,11 @@ type DailyPreviewRow = {
   video_id: string;
   video_title: string | null;
   digest_date: string;
+  generation_model: string | null;
+  generated_at: string | null;
+  transcript_source: string | null;
+  transcript_length: number | null;
+  grounding_status: string | null;
   full_digest_json: unknown;
 };
 
@@ -379,7 +415,7 @@ async function getRecentActivity(userId: string) {
         'Daily digest' as type,
         creators.title as creator_title,
         coalesce(daily_digests.digest_date::text, videos.title, daily_digests.title) as detail,
-        'stored' as status
+        coalesce(daily_digests.processing_status, daily_digests.grounding_status, 'pending') as status
       from daily_digests
       join creators on creators.id = daily_digests.creator_id
       join videos on videos.id = daily_digests.video_id
@@ -400,12 +436,19 @@ async function getLatestDailyPreview(userId: string) {
       daily_digests.video_id,
       videos.title as video_title,
       daily_digests.digest_date::text as digest_date,
+      daily_digests.generation_model,
+      daily_digests.generated_at::text as generated_at,
+      daily_digests.transcript_source,
+      daily_digests.transcript_length,
+      daily_digests.grounding_status,
       daily_digests.full_digest_json
     from daily_digests
     join creators on creators.id = daily_digests.creator_id
     join videos on videos.id = daily_digests.video_id
     join user_creators on user_creators.creator_id = daily_digests.creator_id
     where user_creators.user_id = ${userId}
+      and daily_digests.grounding_status = 'grounded'
+      and daily_digests.transcript_source = 'youtube_transcript_free'
     order by daily_digests.digest_date desc, videos.published_at desc nulls last
     limit 1
   `;
@@ -425,4 +468,12 @@ function formatCreatorTitle(title: string | null) {
   if (!title) return "Creator";
   const label = title.includes("|") ? title.split("|").at(-1)?.trim() ?? title : title;
   return label.replace("Nate B Jones", "Nate B. Jones");
+}
+
+function statusTextClass(status: string) {
+  if (status === "failed") return "text-red-700";
+  if (status === "waiting_for_transcript" || status === "processing" || status === "queued") {
+    return "text-amber-700";
+  }
+  return "text-emerald-700";
 }

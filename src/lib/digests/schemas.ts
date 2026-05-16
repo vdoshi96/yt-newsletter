@@ -8,6 +8,15 @@ import {
   cleanSkepticismNote,
 } from "./text-cleanup";
 
+const optionalNonEmptyString = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value === "string" && !value.trim()) return undefined;
+    return value;
+  },
+  z.string().min(1).optional(),
+);
+
 export const layoutTypeSchema = z.enum([
   "single_big_story",
   "two_lead_stories",
@@ -19,7 +28,7 @@ export const layoutTypeSchema = z.enum([
 
 const linkSchema = z.object({
   label: z.string().min(1),
-  url: z.string().url().or(z.string().min(1)),
+  url: optionalNonEmptyString,
 });
 
 const glossarySchema = z.object({
@@ -28,8 +37,8 @@ const glossarySchema = z.object({
 });
 
 const sourceNoteSchema = z.object({
-  timestamp: z.string().nullish(),
-  quote: z.string().optional(),
+  timestamp: optionalNonEmptyString,
+  quote: optionalNonEmptyString,
   note: z.string().min(1),
 });
 
@@ -51,7 +60,7 @@ const transcriptGroundingSchema = z.object({
   key_excerpts: z
     .array(
       z.object({
-        timestamp: z.string().nullish(),
+        timestamp: optionalNonEmptyString,
         quote: z.string().min(1),
         note: z.string().min(1),
       }),
@@ -62,7 +71,7 @@ const transcriptGroundingSchema = z.object({
 const weeklySourceNoteSchema = z.object({
   date: z.string().min(1),
   label: z.string().min(1),
-  url: z.string().url().or(z.string().min(1)).optional(),
+  url: optionalNonEmptyString,
   note: z.string().min(1),
 });
 
@@ -72,16 +81,54 @@ const weeklyPostSchema = z.object({
   title: z.string().min(1),
   summary: z.string().min(1),
   why_it_matters: z.string().min(1),
-  source_url: z.string().url().or(z.string().min(1)).optional(),
+  source_url: optionalNonEmptyString,
 });
+
+const modelStringArray = z.preprocess((value) => {
+  if (value === null || value === undefined) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") return value.trim() ? [value] : [];
+  return [String(value)];
+}, z.array(z.string()).default([]));
 
 const researchBriefSchema = z.object({
   title: z.string().min(1),
   thesis: z.string().min(1),
-  evidence: z.array(z.string()).default([]),
-  implications: z.array(z.string()).default([]),
+  evidence: modelStringArray,
+  implications: modelStringArray,
   uncertainty: z.string().min(1),
 });
+
+const weeklyGroundingSchema = z.object({
+  grounded: z.boolean().default(false),
+  source: z.string().min(1).default("daily_digests"),
+  source_digest_count: z.number().int().nonnegative().default(0),
+  source_date_range: z
+    .object({
+      start: z.string().min(1),
+      end: z.string().min(1),
+    })
+    .optional(),
+  generated_at: z.string().min(1).optional(),
+  generation_model: z.string().min(1).optional(),
+  limitations: z.array(z.string()).default([]),
+});
+
+const podcastGenerationSchema = z.object({
+  status: z.string().min(1).default("pending"),
+  target_minutes: z.number().nonnegative().optional(),
+  words_per_minute: z.number().nonnegative().optional(),
+  word_count: z.number().int().nonnegative().optional(),
+  provider: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  cast_id: z.string().min(1).optional(),
+  generated_at: z.string().min(1).optional(),
+  voice_config: z.record(z.string(), z.unknown()).optional(),
+  source_references: z.array(z.record(z.string(), z.unknown())).default([]),
+  error_message: z.string().optional(),
+});
+
+const sourceReferenceSchema = z.record(z.string(), z.unknown());
 
 const explanationLevelsSchema = z.object(
   Object.fromEntries(EXPLANATION_LEVEL_KEYS.map((level) => [level, z.string().min(1)])) as Record<
@@ -92,6 +139,13 @@ const explanationLevelsSchema = z.object(
 
 const defaultedString = (fallback: string) =>
   z.preprocess((value) => (value === null || value === undefined ? fallback : value), z.string());
+
+const modelString = z.preprocess((value) => {
+  if (Array.isArray(value)) return value.map((item) => String(item)).join("\n");
+  if (value === null || value === undefined) return value;
+  if (typeof value === "object") return JSON.stringify(value);
+  return value;
+}, z.string());
 
 const importanceScoreSchema = z.preprocess((value) => {
   if (typeof value !== "number") return value;
@@ -113,7 +167,7 @@ export const dailyDigestSchema = z
     free_learning_plan: z.array(z.string()).default([]),
     glossary: z.array(glossarySchema).default([]),
     topic_links: z.array(linkSchema).default([]),
-    skepticism_notes: z.string().min(1),
+    skepticism_notes: modelString.pipe(z.string().min(1)),
     source_notes: z.array(sourceNoteSchema).default([]),
     concepts_to_learn: conceptsToLearnSchema.default({
       beginner: [],
@@ -152,6 +206,13 @@ export const weeklyDigestSchema = z
     weekly_posts: z.array(weeklyPostSchema).default([]),
     research_briefs: z.array(researchBriefSchema).default([]),
     source_notes: z.array(weeklySourceNoteSchema).default([]),
+    source_references: z.array(sourceReferenceSchema).default([]),
+    weekly_grounding: weeklyGroundingSchema.default({
+      grounded: false,
+      source: "daily_digests",
+      source_digest_count: 0,
+      limitations: ["Weekly grounding metadata is missing; regenerate this week."],
+    }),
     ranked_topics: z
       .array(
         z.object({
@@ -165,6 +226,10 @@ export const weeklyDigestSchema = z
     what_to_do_next: z.array(z.string()).default([]),
     free_learning_plan: z.array(z.string()).default([]),
     podcast_script: z.string().min(1),
+    podcast_generation: podcastGenerationSchema.default({
+      status: "pending",
+      source_references: [],
+    }),
   })
   .transform((digest) => ({
     ...digest,
