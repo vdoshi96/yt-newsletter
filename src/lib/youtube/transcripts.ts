@@ -18,6 +18,18 @@ export type TranscriptResult =
       retry_after: string;
     };
 
+const DEFAULT_TRANSCRIPT_RETRY_MINUTES = 60;
+
+export function transcriptRetryDelayMs() {
+  const configuredMinutes = Number(process.env.TRANSCRIPT_RETRY_MINUTES);
+  const minutes =
+    Number.isFinite(configuredMinutes) && configuredMinutes > 0
+      ? configuredMinutes
+      : DEFAULT_TRANSCRIPT_RETRY_MINUTES;
+
+  return minutes * 60 * 1000;
+}
+
 export async function fetchFreeTranscript(videoId: string): Promise<TranscriptResult> {
   try {
     const mod = (await import("youtube-transcript")) as {
@@ -38,10 +50,7 @@ export async function fetchFreeTranscript(videoId: string): Promise<TranscriptRe
       retry_after: null,
     };
   } catch {
-    const retryAfter = new Date();
-    retryAfter.setHours(
-      retryAfter.getHours() + Number(process.env.TRANSCRIPT_RETRY_HOURS ?? 24),
-    );
+    const retryAfter = new Date(Date.now() + transcriptRetryDelayMs());
     return {
       status: "missing",
       source: "youtube_transcript_free",

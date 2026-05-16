@@ -22,3 +22,18 @@ export function getDailyVideoPickerState(
     options,
   };
 }
+
+export function selectDailyDigestForDate<T extends DailyDigestPickerItem>(
+  digests: T[],
+  selectedDate: string,
+  selectedVideoId?: string,
+  isFinalDigest?: (digest: T) => boolean,
+) {
+  const dateDigests = digests.filter((digest) => digest.digest_date === selectedDate);
+
+  if (selectedVideoId) {
+    return dateDigests.find((digest) => digest.video_id === selectedVideoId) ?? null;
+  }
+
+  return (isFinalDigest ? dateDigests.find(isFinalDigest) : undefined) ?? dateDigests[0] ?? null;
+}

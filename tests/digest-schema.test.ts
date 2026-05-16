@@ -193,4 +193,21 @@ describe("digest schemas", () => {
     expect(parsed.research_briefs[0].evidence).toEqual(["Daily digest source."]);
     expect(parsed.research_briefs[0].implications).toEqual(["Track unit costs."]);
   });
+
+  it("normalizes weekly provider list fields and defaults the deterministic podcast script", () => {
+    const parsed = weeklyDigestSchema.parse({
+      title: "This week in AI",
+      newsletter_markdown: "# Week",
+      board_level_implications: "Ask for review ownership.",
+      ranked_topics: [{ topic: "Agents", importance_score: 0.8, why_it_matters: "Useful." }],
+      what_changed: "The focus shifted.",
+      what_to_do_next: "Run a small reversible test.",
+      free_learning_plan: "Read free documentation.",
+    });
+
+    expect(parsed.board_level_implications).toEqual(["Ask for review ownership."]);
+    expect(parsed.what_to_do_next).toEqual(["Run a small reversible test."]);
+    expect(parsed.free_learning_plan).toEqual(["Read free documentation."]);
+    expect(parsed.podcast_script).toBe("Pending deterministic podcast script.");
+  });
 });

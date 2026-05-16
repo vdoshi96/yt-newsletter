@@ -13,7 +13,7 @@ describe("two-host podcast scripts", () => {
     expect(getPodcastCastForWeek("2026-05-17").id).toBe("puck_kora");
   });
 
-  it("opens with rotating host introductions and podcast-style banter", () => {
+  it("opens with a source contract and podcast-style host chemistry", () => {
     const digest = weeklyDigestSchema.parse({
       title: "Week of careful AI",
       newsletter_markdown: "# Week\n\nSource-backed summary.",
@@ -25,10 +25,32 @@ describe("two-host podcast scripts", () => {
       ranked_topics: [
         { topic: "Evaluation", importance_score: 0.9, why_it_matters: "It catches mistakes." },
       ],
+      weekly_posts: [
+        {
+          date: "2026-05-03",
+          type: "video",
+          title: "Week source",
+          summary: "The source-backed example focused on checking AI outputs.",
+          why_it_matters: "Checking outputs keeps automation accountable.",
+        },
+      ],
       what_changed: "The week shifted from demos to reliability.",
       what_to_do_next: ["Try a small free checklist exercise."],
       free_learning_plan: ["Read official docs."],
       podcast_script: "Legacy script.",
+      weekly_grounding: {
+        grounded: true,
+        source: "daily_digests",
+        source_digest_count: 2,
+        source_date_range: { start: "2026-05-03", end: "2026-05-09" },
+      },
+      source_references: [
+        {
+          date: "2026-05-03",
+          label: "Daily digest: Week source",
+          quotes: [{ quote: "We need to evaluate outputs before trusting them." }],
+        },
+      ],
     });
 
     const cast = getPodcastCastForWeek("2026-05-03");
@@ -43,9 +65,12 @@ describe("two-host podcast scripts", () => {
     expect(script).toContain("Kora:");
     expect(script).toContain("I'm Puck");
     expect(script).toContain("I'm Kora");
-    expect(script).toContain("rotating cast");
-    expect(script).toContain("proper podcast");
+    expect(script).toContain("source contract");
+    expect(script).toContain("transcript-grounded daily digests");
     expect(script).toContain("AI tools are helpers");
     expect(script).toContain("orchestration under uncertainty");
+    expect(script).toContain("We need to evaluate outputs before trusting them.");
+    expect(script).not.toContain("Intro:");
+    expect(script).not.toContain("Topic transition");
   });
 });

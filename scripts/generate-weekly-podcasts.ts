@@ -12,6 +12,7 @@ import {
   getPodcastCastForWeek,
   type PodcastHostCast,
   type PodcastHostKey,
+  type PodcastLine,
 } from "@/lib/podcasts/two-host";
 import { getPodcastAudioConfig, getPodcastScriptConfig } from "@/lib/podcasts/config";
 import { uploadGeneratedAsset } from "@/lib/supabase/storage";
@@ -60,6 +61,19 @@ type WeeklyDigestRow = {
 type HostVoice = {
   host: PodcastHostKey;
   voice: string;
+};
+
+type PodcastAudioQa = {
+  status: "passed" | "failed";
+  duration_seconds: number | null;
+  target_minutes: number;
+  actual_wpm: number | null;
+  file_bytes: number;
+  codec: string | null;
+  sample_rate: number | null;
+  channels: number | null;
+  bitrate: number | null;
+  qa_errors: string[];
 };
 
 async function main() {
@@ -129,6 +143,66 @@ async function getWeeklyDigests() {
         : isWeeklyPodcastReady({ weekStart: row.week_start, weekEnd: row.week_end }),
     )
     .slice(0, limit);
+}
+
+function splitPodcastLinesForTts(lines: PodcastLine[], maxCharacters = 900) {
+  const splitLines: PodcastLine[] = [];
+  for (const line of lines) {
+    if (line.text.length <= maxCharacters) {
+      splitLines.push(line);
+      continue;
+    }
+    const chunks = splitTextForTts(line.text, maxCharacters);
+    for (const [index, text] of chunks.entries()) {
+      splitLines.push({
+        ...line,
+        text,
+        pauseAfterMs: index === chunks.length - 1 ? line.pauseAfterMs : 250,
+      });
+    }
+  }
+  return splitLines;
+}
+
+function groupPodcastLinesForTts(lines: PodcastLine[], maxCharacters: number) {
+  const chunks: PodcastLine[][] = [];
+  let current: PodcastLine[] = [];
+  let currentCharacters = 0;
+  for (const line of lines) {
+    const lineCharacters = line.hostName.length + line.text.length + 4;
+    if (current.length && currentCharacters + lineCharacters > maxCharacters) {
+      chunks.push(current);
+      current = [line];
+      currentCharacters = lineCharacters;
+    } else {
+      current.push(line);
+      currentCharacters += lineCharacters;
+    }
+  }
+  if (current.length) chunks.push(current);
+  return chunks;
+}
+
+function splitTextForTts(text: string, maxCharacters: number) {
+  const sentences = text.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) ?? [text];
+  const chunks: string[] = [];
+  let current = "";
+  for (const sentence of sentences.map((item) => item.trim()).filter(Boolean)) {
+    if (!current) {
+      current = sentence;
+    } else if (`${current} ${sentence}`.length <= maxCharacters) {
+      current = `${current} ${sentence}`;
+    } else {
+      chunks.push(current);
+      current = sentence;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.flatMap((chunk) => {
+    if (chunk.length <= maxCharacters) return [chunk];
+    const fallback = chunk.match(new RegExp(`.{1,${maxCharacters}}(?:\\s|$)`, "g"));
+    return fallback?.map((part) => part.trim()).filter(Boolean) ?? [chunk];
+  });
 }
 
 async function getPodcastVoices(
@@ -229,19 +303,37 @@ async function generatePodcastForWeek(input: {
     const outputPath = path.join(workDir, "podcast.mp3");
 
     if (audioConfig.provider === "gemini_flash") {
-      const wavPath = path.join(workDir, "podcast.wav");
-      await synthesizeGeminiPodcast({
-        apiKey: input.apiKey,
-        cast,
-        script,
-        outputPath: wavPath,
-      });
-      await convertAudio(wavPath, outputPath);
+      const ttsChunks = groupPodcastLinesForTts(splitPodcastLinesForTts(lines), 1_600);
+      const segmentPaths: string[] = [];
+      for (let index = 0; index < ttsChunks.length; index += 1) {
+        const chunk = ttsChunks[index];
+        const lastLine = chunk[chunk.length - 1];
+        const nextLine = ttsChunks[index + 1]?.[0];
+        const segmentPath = path.join(workDir, `segment-${String(index).padStart(2, "0")}.wav`);
+        await synthesizeGeminiPodcast({
+          apiKey: input.apiKey,
+          cast,
+          script: formatTwoHostPodcastScript(chunk),
+          outputPath: segmentPath,
+        });
+        segmentPaths.push(segmentPath);
+        if (nextLine) {
+          const silencePath = path.join(workDir, `silence-${String(index).padStart(2, "0")}.wav`);
+          await createSilenceSegment({
+            outputPath: silencePath,
+            durationMs: lastLine.pauseAfterMs ??
+              defaultPauseAfterLine(lastLine.section, nextLine.section),
+          });
+          segmentPaths.push(silencePath);
+        }
+      }
+      await concatenateAudio(segmentPaths, outputPath);
     } else {
       const voices = await getPodcastVoices(input.apiKey, cast);
+      const ttsLines = splitPodcastLinesForTts(lines);
       const segmentPaths: string[] = [];
-      for (let index = 0; index < lines.length; index += 1) {
-        const line = lines[index];
+      for (let index = 0; index < ttsLines.length; index += 1) {
+        const line = ttsLines[index];
         const voice = voices[line.host].voice;
         const segmentPath = path.join(workDir, `segment-${String(index).padStart(2, "0")}.wav`);
         await synthesizeQwenLine({
@@ -251,11 +343,26 @@ async function generatePodcastForWeek(input: {
           outputPath: segmentPath,
         });
         segmentPaths.push(segmentPath);
+        if (index < ttsLines.length - 1) {
+          const silencePath = path.join(workDir, `silence-${String(index).padStart(2, "0")}.wav`);
+          await createSilenceSegment({
+            outputPath: silencePath,
+            durationMs: line.pauseAfterMs ??
+              defaultPauseAfterLine(line.section, ttsLines[index + 1].section),
+          });
+          segmentPaths.push(silencePath);
+        }
       }
       await concatenateAudio(segmentPaths, outputPath);
     }
 
     const audio = await readFile(outputPath);
+    const audioQa = await buildAudioQa({
+      outputPath,
+      fileBytes: audio.byteLength,
+      wordCount,
+    });
+    assertPodcastAudioQa(audioQa);
     const provider = audioConfig.provider === "gemini_flash" ? "gemini" : "qwen";
     const model = audioConfig.provider === "gemini_flash" ? geminiModel : ttsModel;
     const characterCount = lines.reduce((sum, line) => sum + line.text.length, 0);
@@ -277,6 +384,7 @@ async function generatePodcastForWeek(input: {
       cast,
       sourceReferences,
       voiceConfig,
+      audioQa,
       estimatedCostUsd: estimateAudioCostUsd(provider, characterCount),
     });
     console.log(
@@ -293,72 +401,84 @@ async function synthesizeGeminiPodcast(input: {
   script: string;
   outputPath: string;
 }) {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-goog-api-key": input.apiKey,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-goog-api-key": input.apiKey,
+          },
+          body: JSON.stringify({
+            contents: [
               {
-                text:
-                  "Read this as a natural two-host weekly technology podcast. " +
-                  "Use the speaker labels only to assign voices; do not read the labels aloud. " +
-                  "Keep the tone conversational, source-grounded, lightly skeptical, and paced like hosts thinking together.\n\n" +
-                  input.script,
+                parts: [
+                  {
+                    text:
+                      "Read this as a natural two-host weekly technology podcast. " +
+                      "Use the speaker labels only to assign voices; do not read the labels aloud. " +
+                      "Keep the tone conversational, source-grounded, lightly skeptical, and paced like hosts thinking together.\n\n" +
+                      input.script,
+                  },
+                ],
               },
             ],
-          },
-        ],
-        generationConfig: {
-          responseModalities: ["AUDIO"],
-          speechConfig: {
-            multiSpeakerVoiceConfig: {
-              speakerVoiceConfigs: [
-                {
-                  speaker: input.cast.hosts.primary.name,
-                  voiceConfig: {
-                    prebuiltVoiceConfig: {
-                      voiceName: input.cast.hosts.primary.geminiVoice,
+            generationConfig: {
+              responseModalities: ["AUDIO"],
+              speechConfig: {
+                multiSpeakerVoiceConfig: {
+                  speakerVoiceConfigs: [
+                    {
+                      speaker: input.cast.hosts.primary.name,
+                      voiceConfig: {
+                        prebuiltVoiceConfig: {
+                          voiceName: input.cast.hosts.primary.geminiVoice,
+                        },
+                      },
                     },
-                  },
-                },
-                {
-                  speaker: input.cast.hosts.secondary.name,
-                  voiceConfig: {
-                    prebuiltVoiceConfig: {
-                      voiceName: input.cast.hosts.secondary.geminiVoice,
+                    {
+                      speaker: input.cast.hosts.secondary.name,
+                      voiceConfig: {
+                        prebuiltVoiceConfig: {
+                          voiceName: input.cast.hosts.secondary.geminiVoice,
+                        },
+                      },
                     },
-                  },
+                  ],
                 },
-              ],
+              },
             },
-          },
+            model: geminiModel,
+          }),
         },
-        model: geminiModel,
-      }),
-    },
-  );
-  const body = (await response.json().catch(() => ({}))) as {
-    error?: { message?: string };
-    candidates?: Array<{
-      content?: { parts?: Array<{ inlineData?: { data?: string } }> };
-    }>;
-  };
-  const data = body.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!response.ok || !data) {
-    const message = body.error?.message;
-    throw new Error(
-      `Gemini TTS failed with status ${response.status}${message ? `: ${message}` : ""}.`,
-    );
+      );
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+        candidates?: Array<{
+          content?: { parts?: Array<{ inlineData?: { data?: string } }> };
+        }>;
+      };
+      const data = body.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (response.ok && data) {
+        await writeFile(input.outputPath, createWav(Buffer.from(data, "base64")));
+        return;
+      }
+      const message = body.error?.message;
+      lastError = new Error(
+        `Gemini TTS failed with status ${response.status}${message ? `: ${message}` : ""}.`,
+      );
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Gemini TTS failed.");
+    }
+    if (attempt < 3) {
+      await sleep(1_500 * attempt);
+    }
   }
 
-  await writeFile(input.outputPath, createWav(Buffer.from(data, "base64")));
+  throw lastError ?? new Error("Gemini TTS failed.");
 }
 
 async function synthesizeQwenLine(input: {
@@ -392,6 +512,21 @@ async function synthesizeQwenLine(input: {
     throw new Error(`Could not download Qwen audio: ${audioResponse.status}.`);
   }
   await writeFile(input.outputPath, Buffer.from(await audioResponse.arrayBuffer()));
+}
+
+async function createSilenceSegment(input: { outputPath: string; durationMs: number }) {
+  await run("ffmpeg", [
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    "anullsrc=r=24000:cl=mono",
+    "-t",
+    String(input.durationMs / 1000),
+    "-c:a",
+    "pcm_s16le",
+    input.outputPath,
+  ]);
 }
 
 function createWav(pcm: Buffer, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
@@ -433,17 +568,85 @@ async function concatenateAudio(segmentPaths: string[], outputPath: string) {
   await run("ffmpeg", args);
 }
 
-async function convertAudio(inputPath: string, outputPath: string) {
-  await run("ffmpeg", [
-    "-y",
-    "-i",
-    inputPath,
-    "-codec:a",
-    "libmp3lame",
-    "-b:a",
-    audioConfig.audioBitrate,
+async function buildAudioQa(input: {
+  outputPath: string;
+  fileBytes: number;
+  wordCount: number;
+}): Promise<PodcastAudioQa> {
+  const probe = await probeAudio(input.outputPath);
+  const durationSeconds = probe.durationSeconds;
+  const actualWpm = durationSeconds && durationSeconds > 0
+    ? Number((input.wordCount / (durationSeconds / 60)).toFixed(1))
+    : null;
+  const qa: PodcastAudioQa = {
+    status: "passed",
+    duration_seconds: durationSeconds,
+    target_minutes: scriptConfig.targetMinutes,
+    actual_wpm: actualWpm,
+    file_bytes: input.fileBytes,
+    codec: probe.codec,
+    sample_rate: probe.sampleRate,
+    channels: probe.channels,
+    bitrate: probe.bitrate,
+    qa_errors: [],
+  };
+  const targetSeconds = scriptConfig.targetMinutes * 60;
+  const minDuration = Math.max(300, targetSeconds * 0.55);
+  const maxDuration = targetSeconds * 1.65;
+  if (!durationSeconds || durationSeconds < minDuration) {
+    qa.qa_errors.push(
+      `Audio duration ${durationSeconds ?? 0}s is shorter than minimum ${Math.round(minDuration)}s.`,
+    );
+  }
+  if (durationSeconds && durationSeconds > maxDuration) {
+    qa.qa_errors.push(
+      `Audio duration ${Math.round(durationSeconds)}s is longer than maximum ${Math.round(maxDuration)}s.`,
+    );
+  }
+  if (actualWpm && (actualWpm < 70 || actualWpm > 230)) {
+    qa.qa_errors.push(`Actual pacing ${actualWpm} WPM is outside the expected range.`);
+  }
+  if (input.fileBytes < 100_000) {
+    qa.qa_errors.push("Audio file is too small to be a complete podcast asset.");
+  }
+  if (!probe.codec) {
+    qa.qa_errors.push("Audio codec could not be probed.");
+  }
+  if (qa.qa_errors.length) qa.status = "failed";
+  return qa;
+}
+
+async function probeAudio(outputPath: string) {
+  const raw = await runCapture("ffprobe", [
+    "-v",
+    "error",
+    "-show_entries",
+    "format=duration,bit_rate:stream=codec_name,sample_rate,channels",
+    "-of",
+    "json",
     outputPath,
   ]);
+  const parsed = JSON.parse(raw) as {
+    streams?: Array<{ codec_name?: string; sample_rate?: string; channels?: number }>;
+    format?: { duration?: string; bit_rate?: string };
+  };
+  const stream = parsed.streams?.[0];
+  const duration = Number(parsed.format?.duration);
+  const sampleRate = Number(stream?.sample_rate);
+  const bitrate = Number(parsed.format?.bit_rate);
+  return {
+    durationSeconds: Number.isFinite(duration) ? Number(duration.toFixed(2)) : null,
+    codec: stream?.codec_name ?? null,
+    sampleRate: Number.isFinite(sampleRate) ? sampleRate : null,
+    channels: typeof stream?.channels === "number" ? stream.channels : null,
+    bitrate: Number.isFinite(bitrate) ? bitrate : null,
+  };
+}
+
+function assertPodcastAudioQa(audioQa: PodcastAudioQa) {
+  if (audioQa.status === "failed") {
+    throw new Error(`Podcast audio QA failed: ${audioQa.qa_errors.join(" ")}`);
+  }
 }
 
 async function savePodcastAsset(input: {
@@ -458,6 +661,7 @@ async function savePodcastAsset(input: {
   cast: PodcastHostCast;
   sourceReferences: Array<Record<string, unknown>>;
   voiceConfig: Record<string, unknown>;
+  audioQa: PodcastAudioQa;
   estimatedCostUsd: number;
 }) {
   const sql = getSql();
@@ -601,6 +805,7 @@ function buildPodcastGenerationMetadata(input: {
   cast: PodcastHostCast;
   voiceConfig: Record<string, unknown>;
   sourceReferences: Array<Record<string, unknown>>;
+  audioQa: PodcastAudioQa;
 }) {
   return {
     status: "podcast_generated",
@@ -612,6 +817,7 @@ function buildPodcastGenerationMetadata(input: {
     cast_id: input.cast.id,
     generated_at: new Date().toISOString(),
     voice_config: input.voiceConfig,
+    audio_qa: input.audioQa,
     source_references: input.sourceReferences,
   };
 }
@@ -643,6 +849,19 @@ function estimateAudioCostUsd(provider: string, characterCount: number) {
   return Number((estimatedMinutes * perMinute).toFixed(6));
 }
 
+function defaultPauseAfterLine(
+  currentSection: ReturnType<typeof buildTwoHostPodcastLines>[number]["section"],
+  nextSection: ReturnType<typeof buildTwoHostPodcastLines>[number]["section"],
+) {
+  if (currentSection !== nextSection) return 1_000;
+  if (currentSection === "closing") return 1_500;
+  return 400;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function run(command: string, args: string[]) {
   return new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, { stdio: "ignore" });
@@ -650,6 +869,28 @@ function run(command: string, args: string[]) {
     child.on("exit", (code) => {
       if (code === 0) resolve();
       else reject(new Error(`${command} exited with code ${code}`));
+    });
+  });
+}
+
+function runCapture(command: string, args: string[]) {
+  return new Promise<string>((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("exit", (code) => {
+      if (code === 0) {
+        resolve(Buffer.concat(stdout).toString("utf8"));
+      } else {
+        reject(
+          new Error(
+            `${command} exited with code ${code}: ${Buffer.concat(stderr).toString("utf8")}`,
+          ),
+        );
+      }
     });
   });
 }

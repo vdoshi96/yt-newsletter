@@ -124,6 +124,7 @@ const podcastGenerationSchema = z.object({
   cast_id: z.string().min(1).optional(),
   generated_at: z.string().min(1).optional(),
   voice_config: z.record(z.string(), z.unknown()).optional(),
+  audio_qa: z.record(z.string(), z.unknown()).optional(),
   source_references: z.array(z.record(z.string(), z.unknown())).default([]),
   error_message: z.string().optional(),
 });
@@ -136,6 +137,8 @@ const explanationLevelsSchema = z.object(
     z.ZodString
   >,
 );
+
+const fullLevelVersionsSchema = explanationLevelsSchema;
 
 const defaultedString = (fallback: string) =>
   z.preprocess((value) => (value === null || value === undefined ? fallback : value), z.string());
@@ -162,6 +165,7 @@ export const dailyDigestSchema = z
     what_creator_said: z.array(z.string()).default([]),
     plain_english_explanation: z.string().min(1),
     explanation_levels: explanationLevelsSchema.optional(),
+    full_level_versions: fullLevelVersionsSchema.optional(),
     why_it_matters: z.string().min(1),
     what_to_do_next: z.array(z.string()).default([]),
     free_learning_plan: z.array(z.string()).default([]),
@@ -191,6 +195,17 @@ export const dailyDigestSchema = z
       digest.explanation_levels,
       digest.plain_english_explanation,
     ),
+    full_level_versions: normalizeExplanationLevels(
+      digest.full_level_versions,
+      [
+        digest.front_page_summary,
+        digest.plain_english_explanation,
+        digest.why_it_matters,
+        ...digest.what_creator_said,
+        ...digest.what_to_do_next,
+        ...digest.free_learning_plan,
+      ].join("\n\n"),
+    ),
   }));
 
 export type DailyDigestPayload = z.infer<typeof dailyDigestSchema>;
@@ -201,7 +216,7 @@ export const weeklyDigestSchema = z
     newsletter_markdown: z.string().min(1),
     explanation_levels: explanationLevelsSchema.optional(),
     executive_insights_memo: z.string().default("No executive memo is available yet."),
-    board_level_implications: z.array(z.string()).default([]),
+    board_level_implications: modelStringArray,
     market_investment_lens: z.string().default("No market or investment lens is available yet."),
     weekly_posts: z.array(weeklyPostSchema).default([]),
     research_briefs: z.array(researchBriefSchema).default([]),
@@ -223,9 +238,9 @@ export const weeklyDigestSchema = z
       )
       .default([]),
     what_changed: z.string().min(1),
-    what_to_do_next: z.array(z.string()).default([]),
-    free_learning_plan: z.array(z.string()).default([]),
-    podcast_script: z.string().min(1),
+    what_to_do_next: modelStringArray,
+    free_learning_plan: modelStringArray,
+    podcast_script: defaultedString("Pending deterministic podcast script."),
     podcast_generation: podcastGenerationSchema.default({
       status: "pending",
       source_references: [],

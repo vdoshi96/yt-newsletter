@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { generateDailyDigestPayload } from "@/lib/ai";
+import { isBaselineMainVideo } from "@/lib/baseline/month";
 import { booleanEnv, numberEnv } from "@/lib/config";
 import { getSql } from "@/lib/db";
 import { digestDateFromPublishedAt } from "@/lib/digests/date";
@@ -12,7 +13,7 @@ import { isGroundedDailyDigestRow } from "@/lib/digests/rendering";
 import { filterDiscoveredMainVideos } from "@/lib/ingest/discovery-filter";
 import { selectVideoIdsNeedingIngestion } from "@/lib/ingest/discovery";
 import { loadPrompt } from "@/lib/prompts";
-import { fetchFreeTranscript } from "@/lib/youtube/transcripts";
+import { fetchFreeTranscript, transcriptRetryDelayMs } from "@/lib/youtube/transcripts";
 import { ensureCompletedWeeklyDigestsForCreator } from "@/lib/weekly/generate";
 
 export type QueueItem = {
@@ -24,17 +25,21 @@ export type QueueItem = {
   title: string;
   url: string;
   published_at: string | Date | null;
+  duration_seconds: number | null;
+  retry_count: number;
 };
 
 const RETRY_MAX_ATTEMPTS = numberEnv("INGEST_ITEM_MAX_RETRIES", 5);
 const RETRY_DELAY_SECONDS = numberEnv("INGEST_ITEM_RETRY_DELAY_SECONDS", 3600);
+const TRANSCRIPT_MAX_ATTEMPTS = numberEnv("TRANSCRIPT_MAX_RETRY_ATTEMPTS", 48);
+const TRANSCRIPT_RETRY_DELAY_SECONDS = Math.ceil(transcriptRetryDelayMs() / 1000);
 
 export type ProcessIngestQueueOptions = {
   forceRegenerateDaily?: boolean;
 };
 
 export async function processIngestQueue(
-  limit = numberEnv("MAX_VIDEOS_PROCESSED_PER_CRON_RUN", 3),
+  limit = numberEnv("MAX_VIDEOS_PROCESSED_PER_CRON_RUN", 1),
   options: ProcessIngestQueueOptions = {},
 ) {
   const sql = getSql();
@@ -49,23 +54,38 @@ export async function processIngestQueue(
         videos.youtube_video_id,
         videos.title,
         videos.url,
-        videos.published_at
+        videos.published_at,
+        videos.duration_seconds,
+        ingest_job_items.retry_count
       from ingest_job_items
       join ingest_jobs on ingest_jobs.id = ingest_job_items.job_id
       join videos on videos.id = ingest_job_items.video_id
       where ingest_job_items.status = 'queued'
          or (
           ingest_job_items.status = 'waiting_for_transcript'
+          and ingest_job_items.completed_at is null
+          and ingest_job_items.retry_count < ${TRANSCRIPT_MAX_ATTEMPTS}
           and exists (
             select 1
             from transcripts
             where transcripts.video_id = videos.id
               and transcripts.needs_retry = true
-              and transcripts.retry_after <= now()
+              and (
+                ingest_job_items.next_retry_at <= now()
+                or (
+                  ingest_job_items.next_retry_at is null
+                  and (
+                    transcripts.retry_after is null
+                    or transcripts.retry_after <= now()
+                    or transcripts.updated_at <= now() - make_interval(secs => ${TRANSCRIPT_RETRY_DELAY_SECONDS}::int)
+                  )
+                )
+              )
           )
         )
          or (
           ingest_job_items.status = 'failed'
+          and ingest_job_items.completed_at is null
           and ingest_job_items.retry_count < ${RETRY_MAX_ATTEMPTS}
           and (ingest_job_items.next_retry_at is null or ingest_job_items.next_retry_at <= now())
         )
@@ -74,7 +94,15 @@ export async function processIngestQueue(
           and ingest_job_items.started_at < now() - make_interval(secs => ${RETRY_DELAY_SECONDS}::int)
           and ingest_job_items.retry_count < ${RETRY_MAX_ATTEMPTS}
         )
-      order by ingest_job_items.created_at asc
+      order by
+        videos.published_at desc nulls last,
+        case
+          when ingest_job_items.status = 'queued' then 0
+          when ingest_job_items.status = 'failed' then 1
+          when ingest_job_items.status = 'waiting_for_transcript' then 2
+          else 3
+        end,
+        ingest_job_items.created_at asc
       limit ${limit}
       for update of ingest_job_items skip locked
     ),
@@ -87,7 +115,7 @@ export async function processIngestQueue(
           event: "queue_item_claimed",
           timestamp: new Date().toISOString(),
         })},
-        started_at = coalesce(started_at, now()),
+        started_at = now(),
         updated_at = now()
       from candidates
       where ingest_job_items.id = candidates.item_id
@@ -99,7 +127,9 @@ export async function processIngestQueue(
         candidates.youtube_video_id,
         candidates.title,
         candidates.url,
-        candidates.published_at
+        candidates.published_at,
+        candidates.duration_seconds,
+        candidates.retry_count
     )
     select * from claimed
   `);
@@ -128,7 +158,7 @@ export async function processIngestQueue(
 }
 
 export async function refreshCreatorsAndProcessQueue(
-  limit = numberEnv("MAX_VIDEOS_PROCESSED_PER_CRON_RUN", 3),
+  limit = numberEnv("MAX_VIDEOS_PROCESSED_PER_CRON_RUN", 1),
 ) {
   const discovery = await checkCreatorsForNewVideos();
   const processing = await processIngestQueue(limit);
@@ -148,7 +178,10 @@ async function countOpenItemsForCreator(creatorId: string) {
     join ingest_jobs on ingest_jobs.id = ingest_job_items.job_id
     where ingest_jobs.creator_id = ${creatorId}
       and (
-        ingest_job_items.status in ('queued', 'processing', 'waiting_for_transcript', 'generating_digest', 'generating_assets')
+        (
+          ingest_job_items.status in ('queued', 'processing', 'waiting_for_transcript', 'generating_digest', 'generating_assets')
+          and ingest_job_items.completed_at is null
+        )
         or (ingest_job_items.status = 'failed' and ingest_job_items.completed_at is null)
       )
   `;
@@ -178,29 +211,63 @@ async function processQueueItem(item: QueueItem, options: ProcessIngestQueueOpti
         youtubeVideoId: item.youtube_video_id,
         timestamp: new Date().toISOString(),
       })},
-      started_at = coalesce(started_at, now()),
+      started_at = now(),
       next_retry_at = null,
       updated_at = now()
     where id = ${item.item_id}
   `;
 
   try {
+    if (!isBaselineMainVideo(item)) {
+      const message = "Video does not meet main-video ingestion criteria.";
+      logIngest("item-skipped-non-main-video", {
+        itemId: item.item_id,
+        videoId: item.video_id,
+        youtubeVideoId: item.youtube_video_id,
+        durationSeconds: item.duration_seconds,
+      });
+      await markQueueItemTerminalFailure(item, message);
+      return;
+    }
+
     const transcript = await ensureTranscript(item);
     if (transcript.status === "missing") {
+      const nextRetryCount = item.retry_count + 1;
+      const retryAfter =
+        "retry_after" in transcript
+          ? transcript.retry_after
+          : new Date(Date.now() + transcriptRetryDelayMs()).toISOString();
       logIngest("transcript-waiting", {
         itemId: item.item_id,
         videoId: item.video_id,
+        retryCount: nextRetryCount,
+        maxAttempts: TRANSCRIPT_MAX_ATTEMPTS,
+        nextRetryAt: retryAfter,
       });
+      if (nextRetryCount >= TRANSCRIPT_MAX_ATTEMPTS) {
+        await markQueueItemTerminalFailure(
+          item,
+          `Transcript missing after ${nextRetryCount} attempt(s).`,
+          nextRetryCount,
+        );
+        return;
+      }
+
       await sql`
         update ingest_job_items
         set
           status = 'waiting_for_transcript',
           processing_status = 'transcript_missing',
           error_message = 'Transcript missing; waiting for retry window.',
+          retry_count = ${nextRetryCount},
+          next_retry_at = ${retryAfter},
+          completed_at = null,
           validation_log = ${sql.json({
             sourceAvailable: false,
             transcriptLength: 0,
             groundingStatus: "blocked",
+            retryCount: nextRetryCount,
+            nextRetryAt: retryAfter,
             timestamp: new Date().toISOString(),
           })},
           updated_at = now()
@@ -227,6 +294,8 @@ async function processQueueItem(item: QueueItem, options: ProcessIngestQueueOpti
       update ingest_job_items
       set
         processing_status = 'transcript_ready',
+        retry_count = 0,
+        next_retry_at = null,
         validation_log = ${sql.json({
           sourceAvailable: true,
           transcriptLength,
@@ -284,6 +353,7 @@ async function processQueueItem(item: QueueItem, options: ProcessIngestQueueOpti
         update ingest_job_items
         set
           status = 'failed',
+          processing_status = 'failed',
           error_message = ${message},
           retry_count = ${nextRetryCount},
           next_retry_at = now() + make_interval(secs => ${RETRY_DELAY_SECONDS}::int),
@@ -304,6 +374,7 @@ async function processQueueItem(item: QueueItem, options: ProcessIngestQueueOpti
         update ingest_job_items
         set
           status = 'failed',
+          processing_status = 'failed',
           error_message = ${message},
           retry_count = ${nextRetryCount},
           next_retry_at = null,
@@ -322,6 +393,42 @@ async function processQueueItem(item: QueueItem, options: ProcessIngestQueueOpti
   } finally {
     await syncJobCounts(item.job_id);
   }
+}
+
+async function markQueueItemTerminalFailure(
+  item: QueueItem,
+  message: string,
+  retryCount = item.retry_count,
+) {
+  const sql = getSql();
+  await sql`
+    update daily_digests
+    set
+      grounding_status = 'failed',
+      processing_status = 'failed',
+      updated_at = now()
+    where video_id = ${item.video_id}
+      and grounding_status <> 'grounded'
+  `;
+  await sql`
+    update ingest_job_items
+    set
+      status = 'failed',
+      processing_status = 'failed',
+      error_message = ${message},
+      retry_count = ${retryCount},
+      next_retry_at = null,
+      completed_at = now(),
+      updated_at = now()
+    where id = ${item.item_id}
+  `;
+  logIngest("item-terminal-failed", {
+    itemId: item.item_id,
+    jobId: item.job_id,
+    videoId: item.video_id,
+    message,
+    retryCount,
+  });
 }
 
 export async function ensureTranscript(item: QueueItem) {

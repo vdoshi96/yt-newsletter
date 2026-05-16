@@ -41,6 +41,13 @@ export function DigestRenderer({ digest }: { digest: DailyDigestPayload }) {
         />
       </div>
 
+      <div className="mt-8">
+        <ExplanationLevelPanel
+          title="Full Digest By CS / AI Proficiency"
+          levels={digest.full_level_versions}
+        />
+      </div>
+
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_0.85fr]">
         <section className="article-column">
           <h2>Why this matters</h2>

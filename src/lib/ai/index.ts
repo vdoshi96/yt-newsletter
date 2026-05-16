@@ -1,8 +1,10 @@
 import { dailyDigestSchema, weeklyDigestSchema } from "@/lib/digests/schemas";
+import { normalizeDailyDigestModelPayload } from "@/lib/ai/daily-payload";
 import { callChatProvider } from "@/lib/ai/providers";
 import { parseJsonFromModel } from "@/lib/ai/json";
 import { logModelUsage } from "@/lib/ai/usage";
 import type { AiProvider, ChatMessage } from "@/lib/ai/types";
+import { numberEnv } from "@/lib/config";
 import {
   assertDailyDigestGrounding,
   buildDailyDigestMessages,
@@ -43,6 +45,7 @@ export async function generateDailyDigestPayload(input: {
         ...option,
         messages,
         responseFormat: "json_object",
+        maxTokens: numberEnv("WEEKLY_AI_MAX_OUTPUT_TOKENS", 12_000),
       });
       await logModelUsage(
         {
@@ -55,7 +58,9 @@ export async function generateDailyDigestPayload(input: {
         result,
       );
       const generationTimestamp = new Date().toISOString();
-      const rawPayload = parseJsonFromModel<Record<string, unknown>>(result.text);
+      const rawPayload = normalizeDailyDigestModelPayload(
+        parseJsonFromModel<Record<string, unknown>>(result.text),
+      );
       const parsed = dailyDigestSchema.parse({
         ...rawPayload,
         transcript_grounding: undefined,
@@ -105,8 +110,8 @@ export async function generateWeeklyDigestPayload(input: {
   ];
 
   const route: Array<{ provider: AiProvider; model: string }> = [
-    { provider: "kimi", model: process.env.KIMI_WEEKLY_MODEL ?? "moonshot-v1-32k" },
     { provider: "deepseek", model: process.env.DEEPSEEK_WEEKLY_FALLBACK_MODEL ?? "deepseek-chat" },
+    { provider: "kimi", model: process.env.KIMI_WEEKLY_MODEL ?? "moonshot-v1-32k" },
   ];
 
   for (const option of route) {

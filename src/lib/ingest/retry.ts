@@ -7,6 +7,16 @@ export type RetryableItemState = {
   retryCount: number;
   startedAt: Date | null;
   nextRetryAt: Date | null;
+  completedAt?: Date | null;
+};
+
+export type WaitingTranscriptState = {
+  status: string;
+  retryCount: number;
+  nextRetryAt: Date | null;
+  transcriptRetryAfter: Date | null;
+  transcriptUpdatedAt: Date | null;
+  completedAt?: Date | null;
 };
 
 export function shouldRetryItem(
@@ -20,6 +30,9 @@ export function shouldRetryItem(
   }
 
   if (item.status === "failed") {
+    if (item.completedAt) {
+      return false;
+    }
     if (item.nextRetryAt === null) {
       return true;
     }
@@ -35,4 +48,36 @@ export function shouldRetryItem(
   }
 
   return false;
+}
+
+export function shouldRetryWaitingTranscript(
+  item: WaitingTranscriptState,
+  now: Date,
+  maxAttempts: number,
+  delaySeconds: number,
+) {
+  if (item.status !== "waiting_for_transcript") {
+    return false;
+  }
+  if (item.completedAt) {
+    return false;
+  }
+  if (item.retryCount >= maxAttempts) {
+    return false;
+  }
+
+  if (item.nextRetryAt) {
+    return item.nextRetryAt.getTime() <= now.getTime();
+  }
+
+  if (item.transcriptRetryAfter && item.transcriptRetryAfter.getTime() <= now.getTime()) {
+    return true;
+  }
+
+  if (item.transcriptUpdatedAt) {
+    const retryThresholdMs = now.getTime() - delaySeconds * 1000;
+    return item.transcriptUpdatedAt.getTime() <= retryThresholdMs;
+  }
+
+  return true;
 }

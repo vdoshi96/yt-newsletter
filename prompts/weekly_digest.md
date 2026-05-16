@@ -18,17 +18,21 @@ Schema keys:
 - what_changed
 - what_to_do_next: string[]
 - free_learning_plan: string[]
-- podcast_script
 
 Editorial shape:
 - Make this feel like a weekly newspaper section, not a concatenation or shorter recap of daily digests.
 - Synthesize major themes, recurring concepts, important updates, practical takeaways, and unresolved questions across the week.
+- Treat the weekly edition as a DeepSeek research-style deep dive over the supplied daily digests: explain the underlying technical concepts, adjacent product, market, governance, and operational ideas, and the practical implications that are directly supported by the source material.
+- Adjacent-topic analysis is allowed only as bounded interpretation from the supplied daily digests, transcript-grounding notes, quote anchors, and date-scoped research notes. Do not introduce unsupplied news, company facts, prices, benchmarks, or market claims.
+- Keep the JSON complete and parseable. Dense, source-bounded synthesis is better than very long prose that risks truncation.
+- Target lengths: `newsletter_markdown` 900-1400 words; each explanation level 180-300 words; `executive_insights_memo` 180-300 words; `market_investment_lens` 250-450 words; each research brief field 1-3 concise paragraphs or bullets.
 - Cover about 10 AI posts for the week: videos, guides, how-to items, research notes, market items, and practical exercises. If there are fewer than 10 source-backed items, create learning-oriented posts from the supplied sources and explicitly mark the limitation.
 - Include a board-level executive insights memo focused on AI strategy, markets, infrastructure, investments, budget risk, and adoption risk.
 - `market_investment_lens` must be meaningfully elaborated, usually 2-4 substantive paragraphs when the sources support it. Explain broader market, ecosystem, product, funding, company, infrastructure, or industry implications without filler.
 - Include deeper research briefs on the most important topics for the week. Each research brief needs context, background, why it matters, practical interpretation, evidence, implications, and uncertainty. Avoid two-line briefs.
+- Research briefs should read like mini deep dives. Define the concept, connect it to the week's grounded examples, describe adjacent concepts a learner should understand, and separate evidence from inference.
 - The weekly digest can be substantially longer than a daily digest.
-- `podcast_script` should be a long-form two-host script with intro, topic transitions, main discussion, practical takeaways, uncertainty caveats, and closing. Make it funny, sharply skeptical, factual, and educational without inventing facts. Target a meaningful listen rather than a skim.
+- Do not write the final podcast script in the weekly JSON; the app builds the 30-minute two-host production from the grounded weekly payload.
 
 Explanation levels:
 - `explanation_levels.beginner` must be written for a layperson who has never coded, has no CS degree, and needs plain-English foundations.

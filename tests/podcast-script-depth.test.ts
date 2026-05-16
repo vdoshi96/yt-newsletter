@@ -101,12 +101,22 @@ describe("weekly podcast script depth", () => {
         "Create a small checklist that catches common mistakes.",
       ],
       podcast_script: "Legacy short script.",
+      weekly_grounding: {
+        grounded: true,
+        source: "daily_digests",
+        source_digest_count: 3,
+        source_date_range: { start: "2026-05-03", end: "2026-05-09" },
+      },
     });
 
     const script = formatTwoHostPodcastScript(buildTwoHostPodcastLines(digest));
 
-    expect(script).toContain("Practical takeaways");
-    expect(script).toContain("Closing");
+    expect(script).toContain("practical takeaways");
+    expect(script).toContain("uncertainty ledger");
+    expect(script).toContain("So that is the week");
+    expect(script).not.toContain("Intro:");
+    expect(script).not.toContain("Market memo:");
+    expect(script).not.toContain("Research desk:");
     expect(script.split(/\s+/).filter(Boolean).length).toBeGreaterThan(4000);
   });
 });

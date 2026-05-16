@@ -7,6 +7,7 @@ export async function callChatProvider(input: {
   model: string;
   messages: ChatMessage[];
   responseFormat?: "json_object" | "text";
+  maxTokens?: number;
 }): Promise<JsonChatResult> {
   if (input.provider === "gemini") {
     return callGemini(input);
@@ -19,6 +20,7 @@ async function callOpenAiCompatible(input: {
   model: string;
   messages: ChatMessage[];
   responseFormat?: "json_object" | "text";
+  maxTokens?: number;
 }) {
   const { apiKey, baseUrl } = getOpenAiCompatibleConfig(input.provider);
   if (!apiKey) throw new Error(`Missing API key for ${input.provider}.`);
@@ -29,6 +31,9 @@ async function callOpenAiCompatible(input: {
   };
   if (input.responseFormat === "json_object" && supportsJsonResponseFormat(input.provider)) {
     body.response_format = { type: "json_object" };
+  }
+  if (input.maxTokens) {
+    body.max_tokens = input.maxTokens;
   }
 
   const timeout = createProviderTimeout();
@@ -68,6 +73,7 @@ async function callOpenAiCompatible(input: {
 async function callGemini(input: {
   model: string;
   messages: ChatMessage[];
+  maxTokens?: number;
 }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("Missing GEMINI_API_KEY.");
@@ -86,6 +92,7 @@ async function callGemini(input: {
           generationConfig: {
             temperature: 0.2,
             responseMimeType: "application/json",
+            maxOutputTokens: input.maxTokens,
           },
         }),
       },
@@ -114,7 +121,7 @@ async function callGemini(input: {
 }
 
 function createProviderTimeout() {
-  const timeoutMs = numberEnv("AI_PROVIDER_TIMEOUT_MS", 180_000);
+  const timeoutMs = numberEnv("AI_PROVIDER_TIMEOUT_MS", 300_000);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   return {

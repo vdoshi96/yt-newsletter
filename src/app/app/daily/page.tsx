@@ -4,7 +4,7 @@ import { DigestRenderer } from "@/components/digest-renderer";
 import { requireUser } from "@/lib/auth/current-user";
 import { getCreatorsForUser } from "@/lib/creators";
 import { dailyDigestSchema } from "@/lib/digests/schemas";
-import { getDailyVideoPickerState } from "@/lib/digests/selection";
+import { getDailyVideoPickerState, selectDailyDigestForDate } from "@/lib/digests/selection";
 import { isGroundedDailyDigestRow } from "@/lib/digests/rendering";
 import { getSql } from "@/lib/db";
 
@@ -44,9 +44,12 @@ export default async function DailyPage({
   const selectedDate = params.date ?? availableDates[0] ?? new Date().toISOString().slice(0, 10);
   const today = new Date().toISOString().slice(0, 10);
   const picker = getDailyVideoPickerState(digests, selectedDate);
-  const dateDigests = digests.filter((digest) => digest.digest_date === selectedDate);
-  const selected =
-    dateDigests.find((digest) => digest.video_id === params.videoId) ?? dateDigests[0] ?? null;
+  const selected = selectDailyDigestForDate(
+    digests,
+    selectedDate,
+    params.videoId,
+    isGroundedDailyDigestRow,
+  );
   const selectedIsGrounded = selected ? isGroundedDailyDigestRow(selected) : false;
   const parsed =
     selected && selectedIsGrounded ? dailyDigestSchema.parse(selected.full_digest_json) : null;

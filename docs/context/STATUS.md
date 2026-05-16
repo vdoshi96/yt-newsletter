@@ -20,6 +20,9 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 - Daily and weekly digest explanation levels: beginner, intermediate, and advanced
 - Hourly creator discovery plus five-minute queue processing for fresher daily digests
 - Admin/manual refresh that discovers YouTube uploads and processes the queue
+- 2026-05-01 through 2026-05-16 main long-form daily digests regenerated and audited from verified transcripts
+- Completed May-covering weekly digests regenerated with DeepSeek and source references
+- Completed May-covering weekly podcasts generated as QA-passed Gemini MP3 assets
 - Approximately 30-minute two-host weekly podcast scripts with configurable target length and TTS settings
 - Two-host weekly podcast MP3 generation with Gemini Flash rotating host casts; existing stored MP3s may include earlier Qwen-generated assets
 - Grounded back-catalog regeneration command with force/dry-run controls and idempotent daily/weekly/podcast metadata
@@ -27,12 +30,13 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 - Prompt files and Zod validation
 - Focused tests for parsing, auth, schemas, progress, and date/video selection
 - Hard transcript-grounding gate for daily digests and safe daily regeneration command
+- Hourly transcript retry recovery for daily uploads that were parked behind legacy 24-hour retry windows
 
 ## Verification
 
 Last known local checks:
 
-- `npm test`: passing, 47+ tests
+- `npm test`: passing, 400 tests
 - `npm run lint`: passing
 - `npx tsc --noEmit`: passing
 - `npm run build`: passing

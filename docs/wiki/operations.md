@@ -48,6 +48,14 @@ Daily digests must never be generated from title-only, metadata-only, stale plac
 
 If transcript extraction fails, the ingest item waits for the transcript retry window instead of publishing a digest. The daily prompt excludes the video title and forbids title, description, thumbnail, channel metadata, prior knowledge, or search results as evidence. The post-generation check requires quote anchors that appear in the transcript.
 
+Transcript retry configuration:
+
+- `TRANSCRIPT_RETRY_MINUTES` controls how soon a missing transcript is retried. Default: `60`.
+- `TRANSCRIPT_MAX_RETRY_ATTEMPTS` controls how many transcript-missing attempts are allowed before the item becomes terminally failed. Default: `48`.
+- `MAX_VIDEOS_PROCESSED_PER_CRON_RUN` should stay at `1` for cron reliability; provider fallback can take long enough that multi-item HTTP runs risk hitting the route `maxDuration`.
+- `AI_PROVIDER_TIMEOUT_MS` controls provider request timeout. Default: `300000` so DeepSeek can spend up to five minutes on higher-quality daily and weekly text output.
+- `WEEKLY_AI_MAX_OUTPUT_TOKENS` controls the weekly model output budget. Default: `12000` so source-backed deep dives are less likely to truncate into invalid JSON.
+
 Stored transcript/digest metadata includes transcript length, transcript source hash, extraction metadata, extraction timestamp, generation model, generation timestamp, grounding status, source references, and processing status. The canonical processing states are `pending`, `transcript_missing`, `transcript_ready`, `digest_generated`, `podcast_generated`, and `failed`.
 
 To safely regenerate a date after a grounding issue:
@@ -68,11 +76,11 @@ Daily and weekly prompts require visibly different explanation depths. Daily dig
 
 The skepticism section must not use the phrase "AI-derived notes from YouTube transcripts." Stored digests are also cleaned at parse time so older rows do not keep showing that wording.
 
-Weekly digests use Saturday-through-Friday windows, so the edition that appears Saturday morning covers the previous weekend plus Monday through Friday. Weekly prompts synthesize daily digests instead of concatenating them, include transcript quote anchors in the weekly source text, and ask for major themes, recurring concepts, practical takeaways, unresolved questions, `market_investment_lens`, and `research_briefs`. The local weekly fallback remains conservative and does not pretend to have external research.
+Weekly digests use Saturday-through-Friday windows, so the edition that appears Saturday morning covers the previous weekend plus Monday through Friday. Weekly prompts synthesize daily digests instead of concatenating them, include transcript quote anchors in the weekly source text, and ask DeepSeek first for major themes, recurring concepts, practical takeaways, unresolved questions, adjacent source-bounded topic deep dives, `market_investment_lens`, and `research_briefs`. The local weekly fallback remains conservative and does not pretend to have external research.
 
 ## Podcast Generation
 
-Weekly podcast scripts are generated as a long-form two-host deep dive from the stored weekly digest. The script includes intro, topic transitions, main discussion, market memo, research desk, practical takeaways, uncertainty caveat, and closing.
+Weekly podcast scripts are generated as a long-form two-host deep dive from the stored weekly digest. The deterministic builder is the canonical production path, so the weekly model does not need to return the final script. The generated script includes a human-stakes cold open, source contract, three audience-depth explanations, source-backed topic arcs, market/operator lens, research desk, practical takeaways, an uncertainty ledger, and closing.
 
 Configuration:
 
@@ -85,7 +93,7 @@ Configuration:
 - `PODCAST_FEMALE_VOICE` / `PODCAST_MALE_VOICE` only apply to the optional Qwen voice-designed path.
 - `PODCAST_AUDIO_BITRATE` controls MP3 export bitrate for `npm run podcasts:generate`. Default: `128k`.
 
-`npm run podcasts:generate` is the preferred high-quality path because it uses Gemini Flash native multi-speaker TTS by default and stores an MP3 in Supabase. By default it selects up to four Sunday-ready weekly podcasts; use `--limit=N`, `--week=YYYY-MM-DD`, `--force`, or `--include-not-ready` when backfilling. Podcast metadata stores provider, model, cast/voice config, target minutes, word count, source references, generation status, and failures.
+`npm run podcasts:generate` is the preferred high-quality path because it uses Gemini Flash native multi-speaker TTS by default and stores an MP3 in Supabase. By default it selects up to four Sunday-ready weekly podcasts; use `--limit=N`, `--week=YYYY-MM-DD`, `--force`, or `--include-not-ready` when backfilling. Podcast metadata stores provider, model, cast/voice config, target minutes, word count, source references, audio QA, generation status, and failures. Audio QA probes the MP3 duration, codec, file size, pacing, and rejects obviously truncated or malformed audio before publishing a public asset URL.
 
 NotebookLM currently has no stable app API for automated generation from this app. Treat NotebookLM as a manual external production option; the automated path here is the best feasible stack-native alternative.
 

@@ -10,6 +10,7 @@ Schema keys:
 - what_creator_said: string[]
 - plain_english_explanation
 - explanation_levels: { beginner, intermediate, advanced }
+- full_level_versions: { beginner, intermediate, advanced } where each value is a complete version of the whole daily digest for that proficiency level
 - why_it_matters
 - what_to_do_next: string[]
 - free_learning_plan: string[]
@@ -27,9 +28,10 @@ Required structure:
 - C. Level 1: Beginner CS Background is `explanation_levels.beginner`: explain the whole digest for someone with basic coding knowledge, define jargon, use simple examples, and do not assume AI systems knowledge.
 - D. Level 2: Intermediate CS Background is `explanation_levels.intermediate`: explain the same digest for someone who understands APIs, backend systems, databases, queues, embeddings, evals, and LLM basics.
 - E. Level 3: Advanced CS / AI Systems Background is `explanation_levels.advanced`: explain the same digest for someone comfortable with agentic systems, inference pipelines, eval harnesses, retrieval, model routing, observability, and production ML/LLM failure modes.
-- F. Actionable Takeaways is `what_to_do_next`: concrete steps the reader can apply to improve their understanding of AI systems.
-- G. Concepts to Learn is `concepts_to_learn`: group important transcript concepts by difficulty.
-- H. Transcript Grounding is attached by the application from the verified transcript plus your `source_notes`.
+- F. Full proficiency versions is `full_level_versions`: rewrite the entire digest three times, not just one explanation paragraph. Each version must include a TL;DR, what the creator said, why it matters, what to do next, free learning path, skepticism/limits, and transcript-grounded evidence in language appropriate for that proficiency level.
+- G. Actionable Takeaways is `what_to_do_next`: concrete steps the reader can apply to improve their understanding of AI systems.
+- H. Concepts to Learn is `concepts_to_learn`: group important transcript concepts by difficulty.
+- I. Transcript Grounding is attached by the application from the verified transcript plus your `source_notes`.
 
 Grounding rules:
 - Use only the verified transcript text and transcript anchors supplied in the user message.
@@ -41,6 +43,7 @@ Grounding rules:
 - `what_creator_said` must summarize only ideas actually present in the transcript.
 - `skepticism_notes` should mention limits in the transcript itself, not uncertainty from missing source access.
 - `plain_english_explanation` must not be copied into the three explanation levels.
+- `full_level_versions` must not be copied from `plain_english_explanation` or `explanation_levels`; each value should read like a complete digest for that reader level.
 - `follow_up_from_yesterday` will be filled by the application after generation; return "No prior digest available."
 - Prefer free learning paths: official docs, free articles, papers, search terms, free videos, and tiny projects.
 - Do not recommend paid courses unless clearly marked optional.

@@ -23,6 +23,17 @@ export type PodcastHostCast = {
 export type PodcastLine = {
   host: PodcastHostKey;
   hostName: string;
+  section:
+    | "cold_open"
+    | "source_contract"
+    | "thesis"
+    | "topic"
+    | "market"
+    | "research"
+    | "practical"
+    | "uncertainty"
+    | "closing";
+  pauseAfterMs?: number;
   text: string;
 };
 
@@ -93,45 +104,62 @@ export function buildTwoHostPodcastLines(
     ? digest.what_to_do_next
     : digest.free_learning_plan;
   const makeLine = lineForCast(cast);
+  const sourceCount = digest.weekly_grounding.source_digest_count || digest.source_references.length;
+  const dateRange = digest.weekly_grounding.source_date_range;
+  const dateWindow = dateRange ? `${dateRange.start} through ${dateRange.end}` : "the stored week";
+  const quoteAnchors = collectQuoteAnchors(digest);
   const primary = cast.hosts.primary.name;
   const secondary = cast.hosts.secondary.name;
   const lines: PodcastLine[] = [
     makeLine(
       "primary",
-      `Intro: Welcome back to the weekly creator briefing. I'm ${primary}, and this week the rotating cast is ${cast.label}. We are treating ${digest.title} like a proper podcast, not a rushed audio memo, so the job is to slow down, make the story legible, and keep the claims tied to the stored digest.`,
+      `Welcome back. I'm ${primary}, and the human question this week is how to use AI without outsourcing judgment. The title on the table is ${digest.title}, but the real job is slower and more useful: make the story legible, keep the evidence visible, and leave with something practical to try.`,
+      "cold_open",
+      900,
     ),
     makeLine(
       "secondary",
-      `And I'm ${secondary}. My role is to be the co-host who asks the annoying useful question: what actually changed, what is still speculative, and what would a smart listener do with this? Tiny bit of banter, then discipline. The week in one sentence: ${digest.what_changed}`,
+      `And I'm ${secondary}. I get the delightful job of asking the useful annoying questions: what actually changed, what is still speculative, and what would a careful listener do with this? The week in one grounded sentence: ${digest.what_changed}`,
+      "cold_open",
     ),
     makeLine(
       "primary",
-      `Exactly. We can have a little back-and-forth, but we are not here to perform certainty. We are here to sort signal from theater, translate the jargon, and turn the week into decisions, experiments, and free learning paths.`,
+      `Before we go anywhere, here is the source contract. This episode is based on ${sourceCount || "the available"} transcript-grounded daily digest${sourceCount === 1 ? "" : "s"} from ${dateWindow}, plus the weekly synthesis stored in the app. We can interpret those sources, but we are not adding outside news, stock calls, or mysterious facts that wandered in from the internet with a tiny suitcase.`,
+      "source_contract",
+      700,
     ),
     makeLine(
       "secondary",
-      `That is the promise for this episode: conversational enough to feel human, grounded enough that you can trace the big claims back to the weekly digest, and practical enough that the ending gives you something small to try.`,
+      `That matters because an AI recap can become a parade of shiny nouns. We are going to use a stricter loop: claim, source-backed example, practical meaning, and uncertainty. If a claim cannot survive that loop, it does not get promoted from interesting to true.`,
+      "source_contract",
+      900,
     ),
     makeLine(
       "primary",
       `For a beginner, the plain-English version is this: ${digest.explanation_levels.beginner}`,
+      "thesis",
     ),
     makeLine(
       "secondary",
       `For someone already using AI tools, the practical middle layer is: ${digest.explanation_levels.intermediate}`,
+      "thesis",
     ),
     makeLine(
       "primary",
       `And for expert listeners, the deeper frame is: ${digest.explanation_levels.advanced}`,
+      "thesis",
+      1000,
     ),
   ];
 
   for (const [index, topic] of topics.entries()) {
     const relatedPost = posts[index];
+    const anchor = quoteAnchors[index % Math.max(quoteAnchors.length, 1)];
     lines.push(
       makeLine(
         index % 2 === 0 ? "secondary" : "primary",
-        `Topic transition ${index + 1}: ${topic.topic}. ${topic.why_it_matters}`,
+        `Let's move into ${topic.topic}. The reason this earned time is that ${topic.why_it_matters}`,
+        "topic",
       ),
     );
 
@@ -139,7 +167,9 @@ export function buildTwoHostPodcastLines(
       lines.push(
         makeLine(
           index % 2 === 0 ? "primary" : "secondary",
-          `The source-backed story here was "${relatedPost.title}" from ${relatedPost.date}. The digest summary was: ${relatedPost.summary} The reason it mattered was: ${relatedPost.why_it_matters}`,
+          `The source-backed story here was "${relatedPost.title}" from ${relatedPost.date}. The digest summary was: ${relatedPost.summary} The reason it mattered was: ${relatedPost.why_it_matters}${anchor ? ` One transcript anchor to keep us honest is: "${anchor}".` : ""}`,
+          "topic",
+          500,
         ),
       );
     }
@@ -148,6 +178,8 @@ export function buildTwoHostPodcastLines(
       makeLine(
         index % 2 === 0 ? "secondary" : "primary",
         `The practical interpretation is to ask what this changes in a real workflow. Does it reduce the time to learn something, improve the quality of a decision, lower the cost of an experiment, or simply make a demo look better than it is? That distinction matters because useful AI adoption usually depends on repeatable value, not surprise.`,
+        "topic",
+        index === topics.length - 1 ? 1000 : 500,
       ),
     );
   }
@@ -155,11 +187,15 @@ export function buildTwoHostPodcastLines(
   lines.push(
     makeLine(
       "primary",
-      `Market memo: ${digest.market_investment_lens} The way to listen to this section is carefully. Market implications are not stock picks. They are clues about where demand, infrastructure pressure, workflow software, and operating budgets may be moving if the source-backed pattern continues.`,
+      `Now let's handle the market and operator lens carefully. ${digest.market_investment_lens} The way to listen to this section is with restraint. Market implications are not stock picks. They are clues about where demand, infrastructure pressure, workflow software, and operating budgets may be moving if the source-backed pattern continues.`,
+      "market",
+      700,
     ),
     makeLine(
       "secondary",
-      `Executive memo: ${digest.executive_insights_memo} A board or operator should translate that into questions: what budget does this affect, what metric proves it works, who owns review quality, and what happens if the provider, model, or cost structure changes?`,
+      `For an executive or board listener, the memo is this: ${digest.executive_insights_memo} Translate that into questions: what budget does this affect, what metric proves it works, who owns review quality, and what happens if the provider, model, or cost structure changes?`,
+      "market",
+      1100,
     ),
   );
 
@@ -167,11 +203,14 @@ export function buildTwoHostPodcastLines(
     lines.push(
       makeLine(
         "primary",
-        `Research desk: ${brief.title}. The thesis is: ${brief.thesis}`,
+        `Let's go to the research desk for ${brief.title}. The thesis is: ${brief.thesis}`,
+        "research",
       ),
       makeLine(
         "secondary",
         `The evidence listed for that brief was: ${formatList(brief.evidence)}. The useful interpretation is: ${formatList(brief.implications)}. The uncertainty to keep in view is: ${brief.uncertainty}`,
+        "research",
+        800,
       ),
     );
   }
@@ -179,19 +218,25 @@ export function buildTwoHostPodcastLines(
   lines.push(
     makeLine(
       "primary",
-      `Practical takeaways: ${formatList(takeaways)}. The best next step is small enough to do for free and concrete enough that you can tell whether it helped.`,
+      `Here are the practical takeaways: ${formatList(takeaways)}. The best next step is small enough to do for free and concrete enough that you can tell whether it helped.`,
+      "practical",
     ),
     makeLine(
       "secondary",
       `A simple way to use this week's digest is to pick one recurring task, define what good output looks like, run a small experiment, and write down what failed. That turns the week from commentary into practice.`,
+      "practical",
+      900,
     ),
     makeLine(
       "primary",
-      "Uncertainty check: the daily sources may be partial, and the weekly synthesis can only be as strong as the material it summarizes. Treat this as a map for investigation, not as a final verdict.",
+      "Let's make the uncertainty ledger explicit. The daily sources may be partial, and the weekly synthesis can only be as strong as the material it summarizes. A direction can be plausible without being proven, a market lens can be useful without being a prediction, and a promising workflow can still fail when real data, permissions, costs, or review burden show up.",
+      "uncertainty",
+      700,
     ),
     makeLine(
       "secondary",
-      "Closing: that is the week. Keep the claims tied to evidence, keep the experiments small, keep the learning path free where possible, and come back to the daily digests when you want to inspect the underlying story.",
+      "So that is the week. Keep the claims tied to evidence, keep the experiments small, keep the learning path free where possible, and come back to the daily digests when you want to inspect the underlying story.",
+      "closing",
     ),
   );
 
@@ -203,9 +248,16 @@ export function formatTwoHostPodcastScript(lines: PodcastLine[]) {
 }
 
 function lineForCast(cast: PodcastHostCast) {
-  return (host: PodcastHostKey, text: string): PodcastLine => ({
+  return (
+    host: PodcastHostKey,
+    text: string,
+    section: PodcastLine["section"] = "topic",
+    pauseAfterMs?: number,
+  ): PodcastLine => ({
     host,
     hostName: cast.hosts[host].name,
+    section,
+    pauseAfterMs,
     text: cleanLine(text),
   });
 }
@@ -235,13 +287,22 @@ function expandTowardTarget(
   }
 
   let pass = 1;
+  const practicalLenses = [
+    "learning",
+    "workflow",
+    "risk",
+    "cost",
+    "measurement",
+    "governance",
+  ];
   while (countWords(formatTwoHostPodcastScript([...body, ...closing])) < targetWords) {
     const topic = digest.ranked_topics[pass % Math.max(digest.ranked_topics.length, 1)];
     const post = digest.weekly_posts[pass % Math.max(digest.weekly_posts.length, 1)];
+    const lens = practicalLenses[pass % practicalLenses.length];
     body.push(
       makeLine(
         pass % 2 === 0 ? "primary" : "secondary",
-        `One more practical pass, because the useful part is repetition with a different lens. ${
+        `Let's revisit the week through a ${lens} lens. ${
           topic
             ? `${topic.topic} matters here because ${topic.why_it_matters}`
             : `The stored digest's main change was: ${digest.what_changed}`
@@ -249,7 +310,7 @@ function expandTowardTarget(
           post
             ? `The closest source-backed example is "${post.title}" from ${post.date}, where the summary was: ${post.summary}`
             : "The stored weekly source did not include another specific post for this pass."
-        } The lesson for a non-technical listener is simple: ask what evidence would make the claim more trustworthy, then ask what small action would make the idea useful without turning it into a giant project.`,
+        } The ${lens} question is: what would make this claim useful enough to test, limited enough to stay reversible, and clear enough that a listener could tell whether it helped?`,
       ),
     );
     pass += 1;
@@ -372,6 +433,24 @@ function buildDeepDiveExpansion(digest: WeeklyDigestPayload, cast: PodcastHostCa
   );
 
   return lines;
+}
+
+function collectQuoteAnchors(digest: WeeklyDigestPayload) {
+  const quotes: string[] = [];
+  for (const reference of digest.source_references) {
+    const rawQuotes = Array.isArray(reference.quotes) ? reference.quotes : [];
+    for (const raw of rawQuotes) {
+      if (typeof raw === "string" && raw.trim()) {
+        quotes.push(raw.trim());
+        continue;
+      }
+      if (raw && typeof raw === "object" && "quote" in raw) {
+        const quote = raw.quote;
+        if (typeof quote === "string" && quote.trim()) quotes.push(quote.trim());
+      }
+    }
+  }
+  return quotes.slice(0, 8);
 }
 
 function countWords(text: string) {

@@ -27,6 +27,17 @@ type PodcastRow = {
     cast_id?: string;
     generated_at?: string;
     error_message?: string;
+    audio_qa?: {
+      status?: string;
+      duration_seconds?: number | null;
+      actual_wpm?: number | null;
+      file_bytes?: number;
+      codec?: string | null;
+      sample_rate?: number | null;
+      channels?: number | null;
+      bitrate?: number | null;
+    };
+    source_references?: Array<Record<string, unknown>>;
   } | null;
   podcast_generated_at: string | null;
   podcast_model: string | null;
@@ -123,6 +134,8 @@ function PodcastArticle({ podcast }: { podcast: PodcastRow }) {
   const model = podcast.podcast_model ?? podcast.asset_model ?? metadata?.model ?? "unknown";
   const provider = podcast.asset_provider ?? metadata?.provider ?? "unknown";
   const generatedAt = podcast.podcast_generated_at ?? metadata?.generated_at ?? "not generated";
+  const audioQa = metadata?.audio_qa;
+  const sourceCount = metadata?.source_references?.length ?? null;
   return (
     <article className="ink-panel">
       <div className="flex items-start gap-4">
@@ -158,6 +171,24 @@ function PodcastArticle({ podcast }: { podcast: PodcastRow }) {
                 {metadata?.word_count ? ` / ${metadata.word_count.toLocaleString()} words` : ""}
               </dd>
             </div>
+            <div>
+              <dt className="font-bold text-slate-950">Audio QA</dt>
+              <dd>
+                {audioQa?.status ?? "not run"}
+                {audioQa?.duration_seconds
+                  ? ` / ${formatDuration(audioQa.duration_seconds)}`
+                  : ""}
+                {audioQa?.actual_wpm ? ` / ${audioQa.actual_wpm} WPM` : ""}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-bold text-slate-950">Sources</dt>
+              <dd>
+                {sourceCount === null
+                  ? "source references unavailable"
+                  : `${sourceCount} source reference${sourceCount === 1 ? "" : "s"}`}
+              </dd>
+            </div>
           </dl>
           {podcast.public_url ? (
             <audio className="mt-4 w-full" controls src={podcast.public_url} />
@@ -190,6 +221,13 @@ function PodcastArticle({ podcast }: { podcast: PodcastRow }) {
 
 function formatStatus(status: string) {
   return status.replace(/_/g, " ");
+}
+
+function formatDuration(seconds: number) {
+  const rounded = Math.round(seconds);
+  const minutes = Math.floor(rounded / 60);
+  const remainingSeconds = rounded % 60;
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
 function EmptyPodcast({ title }: { title: string }) {
