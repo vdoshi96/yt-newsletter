@@ -55,7 +55,7 @@ export function getPodcastAudioConfig(): PodcastAudioConfig {
 }
 
 function parseGenerationMode(value: string | undefined): PodcastGenerationMode {
-  return value === "provider_script" ? "provider_script" : "two_host_deep_dive";
+  return value === "two_host_deep_dive" ? "two_host_deep_dive" : "provider_script";
 }
 
 function parseTtsProvider(value: string | undefined): PodcastTtsProvider {

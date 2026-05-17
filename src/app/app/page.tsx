@@ -18,6 +18,7 @@ import { getIngestJobsForUser } from "@/lib/creators";
 import { summarizeJobProgress } from "@/lib/jobs/progress";
 
 export const dynamic = "force-dynamic";
+const MAIN_VIDEO_MIN_SECONDS = 300;
 
 export default async function AppHome() {
   const user = await requireUser();
@@ -63,7 +64,7 @@ export default async function AppHome() {
 
           <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Stat icon={Users} label="Creators" value={stats.creatorCount} />
-            <Stat icon={Newspaper} label="Daily digests" value={stats.dailyCount} />
+            <Stat icon={Newspaper} label="30-day daily digests" value={stats.dailyCount} />
             <Stat icon={CalendarDays} label="Weekly digests" value={stats.weeklyCount} />
             <Stat icon={Users} label="Starter creator" value="Nate B. Jones" compact />
           </div>
@@ -353,9 +354,14 @@ async function getDashboardStats(userId: string) {
       (
         select count(*)::int
         from daily_digests
+        join videos on videos.id = daily_digests.video_id
         join user_creators on user_creators.creator_id = daily_digests.creator_id
         where user_creators.user_id = ${userId}
           and daily_digests.grounding_status = 'grounded'
+          and daily_digests.digest_date >= current_date - make_interval(days => 30)
+          and coalesce(videos.duration_seconds, 0) >= ${MAIN_VIDEO_MIN_SECONDS}
+          and lower(coalesce(videos.title, '')) not like '%#shorts%'
+          and lower(coalesce(videos.title, '')) not like '% #short %'
       ) as daily_count,
       (
         select count(*)::int
@@ -421,6 +427,9 @@ async function getRecentActivity(userId: string) {
       join videos on videos.id = daily_digests.video_id
       join user_creators on user_creators.creator_id = daily_digests.creator_id
       where user_creators.user_id = ${userId}
+        and coalesce(videos.duration_seconds, 0) >= ${MAIN_VIDEO_MIN_SECONDS}
+        and lower(coalesce(videos.title, '')) not like '%#shorts%'
+        and lower(coalesce(videos.title, '')) not like '% #short %'
     )
     order by occurred_at desc
     limit 4
@@ -449,6 +458,9 @@ async function getLatestDailyPreview(userId: string) {
     where user_creators.user_id = ${userId}
       and daily_digests.grounding_status = 'grounded'
       and daily_digests.transcript_source = 'youtube_transcript_free'
+      and coalesce(videos.duration_seconds, 0) >= ${MAIN_VIDEO_MIN_SECONDS}
+      and lower(coalesce(videos.title, '')) not like '%#shorts%'
+      and lower(coalesce(videos.title, '')) not like '% #short %'
     order by daily_digests.digest_date desc, videos.published_at desc nulls last
     limit 1
   `;

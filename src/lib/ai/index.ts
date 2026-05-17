@@ -1,4 +1,8 @@
-import { dailyDigestSchema, weeklyDigestSchema } from "@/lib/digests/schemas";
+import {
+  dailyDigestSchema,
+  weeklyDigestSchema,
+  type WeeklyDigestPayload,
+} from "@/lib/digests/schemas";
 import { normalizeDailyDigestModelPayload } from "@/lib/ai/daily-payload";
 import { callChatProvider } from "@/lib/ai/providers";
 import { parseJsonFromModel } from "@/lib/ai/json";
@@ -33,56 +37,64 @@ export async function generateDailyDigestPayload(input: {
     previousDailyContext: input.previousDailyContext,
   });
 
-  const route: Array<{ provider: AiProvider; model: string }> = [
-    { provider: "deepseek", model: process.env.DEEPSEEK_DAILY_MODEL ?? "deepseek-chat" },
-    { provider: "qwen", model: process.env.QWEN_DAILY_FALLBACK_MODEL ?? "qwen-plus" },
+  const route: ProviderRouteOption[] = [
+    {
+      provider: "deepseek",
+      model: process.env.DEEPSEEK_DAILY_MODEL ?? "deepseek-v4-pro",
+      attempts: numberEnv("DEEPSEEK_DAILY_MAX_ATTEMPTS", 2),
+      maxTokens: optionalNumberEnv("DAILY_AI_MAX_OUTPUT_TOKENS"),
+      reasoningEffort: parseDeepSeekReasoningEffort(process.env.DEEPSEEK_DAILY_REASONING_EFFORT),
+    },
+    {
+      provider: "qwen",
+      model: process.env.QWEN_DAILY_FALLBACK_MODEL ?? "qwen3-max",
+      attempts: numberEnv("QWEN_DAILY_FALLBACK_MAX_ATTEMPTS", 1),
+      maxTokens: optionalNumberEnv("DAILY_AI_MAX_OUTPUT_TOKENS"),
+    },
   ];
   const failures: string[] = [];
 
   for (const option of route) {
-    try {
-      const result = await callChatProvider({
-        ...option,
-        messages,
-        responseFormat: "json_object",
-        maxTokens: numberEnv("WEEKLY_AI_MAX_OUTPUT_TOKENS", 12_000),
-      });
-      await logModelUsage(
-        {
-          provider: option.provider,
-          model: option.model,
+    for (let attempt = 1; attempt <= option.attempts; attempt += 1) {
+      try {
+        const result = await runProviderRoute({
+          label: "Daily digest",
+          option,
+          attempt,
+          messages,
           taskType: "daily_structured_digest",
           creatorId: input.creatorId,
           videoId: input.videoId,
-        },
-        result,
-      );
-      const generationTimestamp = new Date().toISOString();
-      const rawPayload = normalizeDailyDigestModelPayload(
-        parseJsonFromModel<Record<string, unknown>>(result.text),
-      );
-      const parsed = dailyDigestSchema.parse({
-        ...rawPayload,
-        transcript_grounding: undefined,
-      });
-      assertDailyDigestGrounding({
-        transcriptText: verifiedTranscript.transcript_text,
-        digest: parsed,
-      });
-      return dailyDigestSchema.parse({
-        ...parsed,
-        transcript_grounding: buildTranscriptGroundingMetadata({
-          transcript: verifiedTranscript,
-          generationTimestamp,
-          generationModel: `${option.provider}:${option.model}`,
-          sourceNotes: parsed.source_notes,
-          regeneratedAfterHallucinationFix: input.regeneratedAfterHallucinationFix,
-        }),
-      });
-    } catch (error) {
-      const message = (error as Error).message;
-      failures.push(`${option.provider}:${option.model}: ${message}`);
-      console.warn(`Daily digest provider failed: ${message}`);
+        });
+        const generationTimestamp = new Date().toISOString();
+        const rawPayload = normalizeDailyDigestModelPayload(
+          parseJsonFromModel<Record<string, unknown>>(result.text),
+        );
+        const parsed = dailyDigestSchema.parse({
+          ...rawPayload,
+          transcript_grounding: undefined,
+        });
+        assertDailyDigestGrounding({
+          transcriptText: verifiedTranscript.transcript_text,
+          digest: parsed,
+        });
+        return dailyDigestSchema.parse({
+          ...parsed,
+          transcript_grounding: buildTranscriptGroundingMetadata({
+            transcript: verifiedTranscript,
+            generationTimestamp,
+            generationModel: `${option.provider}:${option.model}`,
+            sourceNotes: parsed.source_notes,
+            regeneratedAfterHallucinationFix: input.regeneratedAfterHallucinationFix,
+          }),
+        });
+      } catch (error) {
+        const message = (error as Error).message;
+        failures.push(`${option.provider}:${option.model}: attempt ${attempt}: ${message}`);
+        console.warn(
+          `Daily digest provider failed: provider=${option.provider} model=${option.model} attempt=${attempt}/${option.attempts} message=${message}`,
+        );
+      }
     }
   }
 
@@ -109,58 +121,217 @@ export async function generateWeeklyDigestPayload(input: {
     },
   ];
 
-  const route: Array<{ provider: AiProvider; model: string }> = [
-    { provider: "deepseek", model: process.env.DEEPSEEK_WEEKLY_FALLBACK_MODEL ?? "deepseek-chat" },
-    { provider: "kimi", model: process.env.KIMI_WEEKLY_MODEL ?? "moonshot-v1-32k" },
+  const route: ProviderRouteOption[] = [
+    {
+      provider: "deepseek",
+      model: process.env.DEEPSEEK_WEEKLY_MODEL ?? "deepseek-v4-pro",
+      attempts: numberEnv("DEEPSEEK_WEEKLY_MAX_ATTEMPTS", 3),
+      maxTokens: optionalNumberEnv("WEEKLY_AI_MAX_OUTPUT_TOKENS"),
+      reasoningEffort: parseDeepSeekReasoningEffort(process.env.DEEPSEEK_WEEKLY_REASONING_EFFORT),
+    },
+    {
+      provider: "kimi",
+      model: process.env.KIMI_WEEKLY_MODEL ?? "moonshot-v1-32k",
+      attempts: numberEnv("KIMI_WEEKLY_MAX_ATTEMPTS", 1),
+      maxTokens: optionalNumberEnv("WEEKLY_AI_MAX_OUTPUT_TOKENS"),
+    },
   ];
 
+  const failures: string[] = [];
   for (const option of route) {
-    try {
-      const result = await callChatProvider({
-        ...option,
-        messages,
-        responseFormat: "json_object",
-      });
-      await logModelUsage(
-        {
-          provider: option.provider,
-          model: option.model,
+    for (let attempt = 1; attempt <= option.attempts; attempt += 1) {
+      try {
+        const result = await runProviderRoute({
+          label: "Weekly digest",
+          option,
+          attempt,
+          messages,
           taskType: "weekly_digest",
           creatorId: input.creatorId,
-        },
-        result,
-      );
-      const generationTimestamp = new Date().toISOString();
-      const parsed = weeklyDigestSchema.parse({
-        ...parseJsonFromModel<Record<string, unknown>>(result.text),
-        weekly_grounding: undefined,
-        podcast_generation: undefined,
-      });
-      assertWeeklyDigestGrounding({
-        sourceText: input.sourceText,
-        digest: parsed,
-      });
-      return weeklyDigestSchema.parse({
-        ...parsed,
-        weekly_grounding: buildWeeklyGroundingMetadata({
-          weekStart: input.weekStart,
-          weekEnd: input.weekEnd,
-          sourceDigestCount: input.sourceDigestCount,
-          generationTimestamp,
-          generationModel: `${option.provider}:${option.model}`,
-        }),
-      });
-    } catch (error) {
-      console.warn(`Weekly digest provider failed: ${(error as Error).message}`);
+        });
+        const generationTimestamp = new Date().toISOString();
+        const parsed = weeklyDigestSchema.parse({
+          ...parseJsonFromModel<Record<string, unknown>>(result.text),
+          weekly_grounding: undefined,
+          podcast_generation: undefined,
+        });
+        assertWeeklyDigestGrounding({
+          sourceText: input.sourceText,
+          digest: parsed,
+        });
+        return weeklyDigestSchema.parse({
+          ...parsed,
+          weekly_grounding: buildWeeklyGroundingMetadata({
+            weekStart: input.weekStart,
+            weekEnd: input.weekEnd,
+            sourceDigestCount: input.sourceDigestCount,
+            generationTimestamp,
+            generationModel: `${option.provider}:${option.model}`,
+          }),
+        });
+      } catch (error) {
+        const message = (error as Error).message;
+        failures.push(`${option.provider}:${option.model}: attempt ${attempt}: ${message}`);
+        console.warn(
+          `Weekly digest provider failed: provider=${option.provider} model=${option.model} attempt=${attempt}/${option.attempts} message=${message}`,
+        );
+      }
     }
   }
 
+  console.warn(
+    `Weekly digest provider route exhausted; using deterministic source-backed fallback. failures=${failures.join(" | ")}`,
+  );
   return buildSourceBackedWeeklyFallback({
     weekStart: input.weekStart,
     weekEnd: input.weekEnd,
     sourceText: input.sourceText,
     sourceDigestCount: input.sourceDigestCount,
   });
+}
+
+export async function generatePodcastScriptPayload(input: {
+  creatorId: string;
+  weekStart: string;
+  weekEnd: string;
+  weeklyDigest: WeeklyDigestPayload;
+  sourceText: string;
+  prompt: string;
+  hostNames?: string;
+}) {
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content:
+        "You are a senior podcast producer and technology editor. Return strict JSON only. Write natural spoken language from the supplied grounded weekly digest and transcript-derived source material.",
+    },
+    {
+      role: "user",
+      content: [
+        input.prompt,
+        "",
+        `WEEK: ${input.weekStart} to ${input.weekEnd}`,
+        `HOSTS: ${input.hostNames ?? "Maya and Theo"}`,
+        "",
+        "WEEKLY DIGEST JSON:",
+        JSON.stringify(input.weeklyDigest),
+        "",
+        "SOURCE DIGESTS AND TRANSCRIPT-DERIVED RHYTHM SAMPLES:",
+        input.sourceText,
+      ].join("\n"),
+    },
+  ];
+
+  const route: ProviderRouteOption[] = [
+    {
+      provider: "deepseek",
+      model: process.env.DEEPSEEK_PODCAST_MODEL ?? "deepseek-v4-pro",
+      attempts: numberEnv("DEEPSEEK_PODCAST_MAX_ATTEMPTS", 2),
+      maxTokens: numberEnv("PODCAST_SCRIPT_MAX_OUTPUT_TOKENS", 24_000),
+      reasoningEffort: parseDeepSeekReasoningEffort(process.env.DEEPSEEK_PODCAST_REASONING_EFFORT),
+    },
+    {
+      provider: "kimi",
+      model: process.env.KIMI_PODCAST_MODEL ?? "moonshot-v1-32k",
+      attempts: numberEnv("KIMI_PODCAST_MAX_ATTEMPTS", 1),
+      maxTokens: numberEnv("PODCAST_SCRIPT_MAX_OUTPUT_TOKENS", 24_000),
+    },
+  ];
+
+  const failures: string[] = [];
+  for (const option of route) {
+    for (let attempt = 1; attempt <= option.attempts; attempt += 1) {
+      try {
+        const result = await runProviderRoute({
+          label: "Podcast script",
+          option,
+          attempt,
+          messages,
+          taskType: "podcast_script",
+          creatorId: input.creatorId,
+        });
+        const parsed = parseJsonFromModel<Record<string, unknown>>(result.text);
+        const script = typeof parsed.podcast_script === "string" ? parsed.podcast_script.trim() : "";
+        if (!script) throw new Error("Podcast script payload did not include podcast_script.");
+        return {
+          podcast_script: script,
+          podcast_generation: {
+            status: "script_generated",
+            provider: option.provider,
+            model: option.model,
+            generated_at: new Date().toISOString(),
+          },
+        };
+      } catch (error) {
+        const message = (error as Error).message;
+        failures.push(`${option.provider}:${option.model}: attempt ${attempt}: ${message}`);
+        console.warn(
+          `Podcast script provider failed: provider=${option.provider} model=${option.model} attempt=${attempt}/${option.attempts} message=${message}`,
+        );
+      }
+    }
+  }
+
+  throw new Error(`Podcast script generation failed for all providers: ${failures.join(" | ")}`);
+}
+
+type ProviderRouteOption = {
+  provider: AiProvider;
+  model: string;
+  attempts: number;
+  maxTokens?: number;
+  reasoningEffort?: "high" | "max";
+};
+
+async function runProviderRoute(input: {
+  label: string;
+  option: ProviderRouteOption;
+  attempt: number;
+  messages: ChatMessage[];
+  taskType: Parameters<typeof logModelUsage>[0]["taskType"];
+  creatorId: string;
+  videoId?: string;
+}) {
+  const result = await callChatProvider({
+    provider: input.option.provider,
+    model: input.option.model,
+    messages: input.messages,
+    responseFormat: "json_object",
+    maxTokens: input.option.maxTokens,
+    reasoningEffort: input.option.reasoningEffort,
+  });
+  await logModelUsage(
+    {
+      provider: input.option.provider,
+      model: input.option.model,
+      taskType: input.taskType,
+      creatorId: input.creatorId,
+      videoId: input.videoId,
+    },
+    result,
+  );
+  console.info(
+    `[ai:${input.label.toLowerCase().replace(/\s+/g, "-")}-generated]`,
+    {
+      provider: input.option.provider,
+      model: input.option.model,
+      attempt: input.attempt,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+    },
+  );
+  return result;
+}
+
+function parseDeepSeekReasoningEffort(value: string | undefined): "high" | "max" {
+  return value === "max" ? "max" : "high";
+}
+
+function optionalNumberEnv(name: string) {
+  const value = process.env[name];
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 type ParsedWeeklySourceItem = {

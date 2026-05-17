@@ -9,6 +9,7 @@ import { isGroundedDailyDigestRow } from "@/lib/digests/rendering";
 import { getSql } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
+const MAIN_VIDEO_MIN_SECONDS = 300;
 
 type DailyRow = {
   id: string;
@@ -195,6 +196,9 @@ async function getDailyDigests(userId: string, creatorId: string) {
     join user_creators on user_creators.creator_id = daily_digests.creator_id
     where user_creators.user_id = ${userId}
       and daily_digests.creator_id = ${creatorId}
+      and coalesce(videos.duration_seconds, 0) >= ${MAIN_VIDEO_MIN_SECONDS}
+      and lower(coalesce(videos.title, '')) not like '%#shorts%'
+      and lower(coalesce(videos.title, '')) not like '% #short %'
     order by daily_digests.digest_date desc, videos.published_at desc nulls last
   `;
 }

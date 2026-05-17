@@ -5,9 +5,9 @@ export type ExplanationLevel = (typeof EXPLANATION_LEVEL_KEYS)[number];
 export type ExplanationLevels = Record<ExplanationLevel, string>;
 
 export const EXPLANATION_LEVEL_LABELS: Record<ExplanationLevel, string> = {
-  beginner: "Level 1: Beginner CS Background",
-  intermediate: "Level 2: Intermediate CS Background",
-  advanced: "Level 3: Advanced CS / AI Systems Background",
+  beginner: "Beginner",
+  intermediate: "Practitioner",
+  advanced: "Advanced",
 };
 
 export function normalizeExplanationLevels(

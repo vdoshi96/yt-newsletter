@@ -3,10 +3,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/current-user";
 import { getCreatorsForUser } from "@/lib/creators";
 import { getSql } from "@/lib/db";
-import {
-  getCurrentSundayWeekStart,
-  resolveSelectedWeekStart,
-} from "@/lib/weekly/navigation";
+import { resolveSelectedWeekStart } from "@/lib/weekly/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -58,9 +55,9 @@ export default async function PodcastsPage({
   const podcasts = creatorId ? await getPodcasts(user.id, creatorId) : [];
   const availableWeeks = podcasts.map((podcast) => podcast.week_start);
   const selectedWeekStart = resolveSelectedWeekStart(params.week, availableWeeks);
+  const latestAvailableWeekStart = [...availableWeeks].sort().at(-1) ?? selectedWeekStart;
   const selectedPodcast =
     podcasts.find((podcast) => podcast.week_start === selectedWeekStart) ?? null;
-  const currentWeekStart = getCurrentSundayWeekStart();
 
   return (
     <div className="space-y-6">
@@ -100,10 +97,10 @@ export default async function PodcastsPage({
             </button>
             <Link
               className="btn-secondary h-11 justify-center"
-              href={`/app/podcasts?creatorId=${creatorId}&week=${currentWeekStart}`}
+              href={`/app/podcasts?creatorId=${creatorId}&week=${latestAvailableWeekStart}`}
             >
               <RotateCcw aria-hidden className="size-4" />
-              Jump to current
+              Jump to latest available
             </Link>
           </form>
         </section>
@@ -125,17 +122,7 @@ export default async function PodcastsPage({
 }
 
 function PodcastArticle({ podcast }: { podcast: PodcastRow }) {
-  const metadata = podcast.podcast_generation_metadata;
-  const status = podcast.podcast_status === "failed" || podcast.asset_generation_status === "failed"
-    ? "failed"
-    : podcast.public_url
-    ? "podcast_generated"
-    : podcast.podcast_status ?? metadata?.status ?? "pending";
-  const model = podcast.podcast_model ?? podcast.asset_model ?? metadata?.model ?? "unknown";
-  const provider = podcast.asset_provider ?? metadata?.provider ?? "unknown";
-  const generatedAt = podcast.podcast_generated_at ?? metadata?.generated_at ?? "not generated";
-  const audioQa = metadata?.audio_qa;
-  const sourceCount = metadata?.source_references?.length ?? null;
+  const failed = podcast.podcast_status === "failed" || podcast.asset_generation_status === "failed";
   return (
     <article className="ink-panel">
       <div className="flex items-start gap-4">
@@ -149,56 +136,15 @@ function PodcastArticle({ podcast }: { podcast: PodcastRow }) {
           <h3 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
             {podcast.title}
           </h3>
-          <dl className="mt-4 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 md:grid-cols-2">
-            <div>
-              <dt className="font-bold text-slate-950">Status</dt>
-              <dd>{formatStatus(status)}</dd>
-            </div>
-            <div>
-              <dt className="font-bold text-slate-950">Generated</dt>
-              <dd>{generatedAt}</dd>
-            </div>
-            <div>
-              <dt className="font-bold text-slate-950">Voice/model</dt>
-              <dd>
-                {provider} / {model}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-bold text-slate-950">Script target</dt>
-              <dd>
-                {metadata?.target_minutes ?? 30} min
-                {metadata?.word_count ? ` / ${metadata.word_count.toLocaleString()} words` : ""}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-bold text-slate-950">Audio QA</dt>
-              <dd>
-                {audioQa?.status ?? "not run"}
-                {audioQa?.duration_seconds
-                  ? ` / ${formatDuration(audioQa.duration_seconds)}`
-                  : ""}
-                {audioQa?.actual_wpm ? ` / ${audioQa.actual_wpm} WPM` : ""}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-bold text-slate-950">Sources</dt>
-              <dd>
-                {sourceCount === null
-                  ? "source references unavailable"
-                  : `${sourceCount} source reference${sourceCount === 1 ? "" : "s"}`}
-              </dd>
-            </div>
-          </dl>
           {podcast.public_url ? (
             <audio className="mt-4 w-full" controls src={podcast.public_url} />
-          ) : status === "failed" ? (
+          ) : failed ? (
             <p className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-              Audio generation failed{metadata?.error_message ? `: ${metadata.error_message}` : "."}
+              This episode is not ready to listen to yet.
             </p>
           ) : (
             <p className="mt-3 text-sm text-slate-600">
-              Audio has not been generated for this week. This is not final placeholder audio.
+              Audio is not available for this week yet.
             </p>
           )}
           {podcast.podcast_script ? (
@@ -217,17 +163,6 @@ function PodcastArticle({ podcast }: { podcast: PodcastRow }) {
       </div>
     </article>
   );
-}
-
-function formatStatus(status: string) {
-  return status.replace(/_/g, " ");
-}
-
-function formatDuration(seconds: number) {
-  const rounded = Math.round(seconds);
-  const minutes = Math.floor(rounded / 60);
-  const remainingSeconds = rounded % 60;
-  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
 function EmptyPodcast({ title }: { title: string }) {

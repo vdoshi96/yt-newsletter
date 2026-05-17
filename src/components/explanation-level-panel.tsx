@@ -41,7 +41,40 @@ export function ExplanationLevelPanel({
           ))}
         </div>
       </div>
-      <p className="mt-4">{levels[selected]}</p>
+      <div className="mt-4 space-y-3">{renderProseParagraphs(levels[selected])}</div>
     </section>
   );
+}
+
+function renderProseParagraphs(text: string) {
+  return splitProseParagraphs(text).map((paragraph, index) => (
+    <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>
+  ));
+}
+
+function splitProseParagraphs(text: string) {
+  const explicit = text
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  if (explicit.length > 1) return explicit;
+
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= 520) return cleaned ? [cleaned] : [];
+
+  const sentences = cleaned.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) ?? [cleaned];
+  const paragraphs: string[] = [];
+  let current = "";
+  for (const sentence of sentences.map((item) => item.trim()).filter(Boolean)) {
+    if (!current) {
+      current = sentence;
+    } else if (`${current} ${sentence}`.length <= 520) {
+      current = `${current} ${sentence}`;
+    } else {
+      paragraphs.push(current);
+      current = sentence;
+    }
+  }
+  if (current) paragraphs.push(current);
+  return paragraphs;
 }

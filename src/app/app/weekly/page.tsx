@@ -6,7 +6,7 @@ import { getSql } from "@/lib/db";
 import { weeklyDigestSchema, type WeeklyDigestPayload } from "@/lib/digests/schemas";
 import { isFinalWeeklyDigestRow } from "@/lib/digests/rendering";
 import { ExplanationLevelPanel } from "@/components/explanation-level-panel";
-import { getCurrentSundayWeekStart, resolveSelectedWeekStart } from "@/lib/weekly/navigation";
+import { resolveSelectedWeekStart } from "@/lib/weekly/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -38,11 +38,11 @@ export default async function WeeklyPage({
   const finalDigests = digests.filter(isFinalWeeklyDigestRow);
   const availableWeeks = finalDigests.map((digest) => digest.week_start);
   const selectedWeekStart = resolveSelectedWeekStart(params.week, availableWeeks);
+  const latestPublishedWeekStart = [...availableWeeks].sort().at(-1) ?? selectedWeekStart;
   const selectedDigest =
     finalDigests.find((digest) => digest.week_start === selectedWeekStart) ??
     digests.find((digest) => digest.week_start === selectedWeekStart) ??
     null;
-  const currentWeekStart = getCurrentSundayWeekStart();
 
   return (
     <div className="space-y-6">
@@ -82,10 +82,10 @@ export default async function WeeklyPage({
             </button>
             <Link
               className="btn-secondary h-11 justify-center"
-              href={`/app/weekly?creatorId=${creatorId}&week=${currentWeekStart}`}
+              href={`/app/weekly?creatorId=${creatorId}&week=${latestPublishedWeekStart}`}
             >
               <RotateCcw aria-hidden className="size-4" />
-              Jump to current
+              Jump to latest published
             </Link>
           </form>
         </section>
@@ -100,7 +100,7 @@ export default async function WeeklyPage({
           </p>
         </section>
       ) : selectedDigest ? (
-        <WeeklyDigestArticle digest={selectedDigest} creatorId={creatorId} />
+        <WeeklyDigestArticle digest={selectedDigest} />
       ) : (
         <EmptyWeek title="No weekly digest for this selected week" />
       )}
@@ -108,7 +108,7 @@ export default async function WeeklyPage({
   );
 }
 
-function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creatorId: string }) {
+function WeeklyDigestArticle({ digest }: { digest: WeeklyRow }) {
   if (!isFinalWeeklyDigestRow(digest)) {
     return <BlockedWeeklyDigest digest={digest} />;
   }
@@ -134,11 +134,11 @@ function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creator
         <div className="space-y-6">
           <section className="article-column">
             <h4>What changed</h4>
-            <p>{parsed.what_changed}</p>
+            <div className="space-y-3">{renderProseParagraphs(parsed.what_changed)}</div>
           </section>
           <section className="article-column">
             <h4>Executive insights memo</h4>
-            <p>{parsed.executive_insights_memo}</p>
+            <div className="space-y-3">{renderProseParagraphs(parsed.executive_insights_memo)}</div>
           </section>
           <ExplanationLevelPanel
             title="Weekly explanation"
@@ -161,44 +161,19 @@ function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creator
         </section>
         <section className="ink-panel">
           <h4 className="section-kicker">Markets and investments</h4>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            {parsed.market_investment_lens}
-          </p>
+          <div className="mt-3 space-y-3 text-sm leading-6 text-slate-600">
+            {renderProseParagraphs(parsed.market_investment_lens)}
+          </div>
         </section>
       </div>
 
-      <section className="mt-6 ink-panel">
-        <h4 className="section-kicker">Posts, videos, guides, and how-to&apos;s</h4>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {parsed.weekly_posts.length ? (
-            parsed.weekly_posts.map((post) => (
-              <Link
-                key={`${post.date}-${post.title}`}
-                href={`/app/daily?creatorId=${creatorId}&date=${post.date}`}
-                className="block rounded-md border border-slate-200 bg-white p-4 text-slate-900 transition hover:border-blue-300 hover:bg-blue-50/30"
-              >
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
-                  {post.date} / {post.type}
-                </p>
-                <h5 className="mt-2 text-xl font-black">{post.title}</h5>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{post.summary}</p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  <strong>Why it matters:</strong> {post.why_it_matters}
-                </p>
-              </Link>
-            ))
-          ) : (
-            <p className="text-sm text-slate-600">No weekly posts were stored for this week.</p>
-          )}
-        </div>
-      </section>
-
       <section className="mt-6">
+        <h4 className="section-kicker">Research and missing context</h4>
         <div className="grid gap-4 lg:grid-cols-2">
           {parsed.research_briefs.map((brief) => (
             <article key={brief.title} className="article-column">
               <h4>{brief.title}</h4>
-              <p>{brief.thesis}</p>
+              <div className="space-y-3">{renderProseParagraphs(brief.thesis)}</div>
               {brief.implications.length ? (
                 <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-600">
                   {brief.implications.map((item) => <li key={item}>{item}</li>)}
@@ -213,21 +188,6 @@ function WeeklyDigestArticle({ digest, creatorId }: { digest: WeeklyRow; creator
       </section>
 
       <NewsletterMarkdown markdown={parsed.newsletter_markdown} />
-
-      <section className="mt-6 ink-panel">
-        <h4 className="section-kicker">Grounded source notes</h4>
-        <ul className="mt-3 space-y-3 text-sm leading-6 text-slate-600">
-          {parsed.source_notes.length ? (
-            parsed.source_notes.map((note) => (
-              <li key={`${note.date}-${note.label}`}>
-                <strong>{note.date}:</strong> {note.label}. {note.note}
-              </li>
-            ))
-          ) : (
-            <li>No weekly source notes were stored for this edition.</li>
-          )}
-        </ul>
-      </section>
     </article>
   );
 }
@@ -347,6 +307,39 @@ function NewsletterMarkdown({ markdown }: { markdown: string }) {
       })}
     </div>
   );
+}
+
+function renderProseParagraphs(text: string) {
+  return splitProseParagraphs(text).map((paragraph, index) => (
+    <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>
+  ));
+}
+
+function splitProseParagraphs(text: string) {
+  const explicit = text
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  if (explicit.length > 1) return explicit;
+
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= 560) return cleaned ? [cleaned] : [];
+
+  const sentences = cleaned.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) ?? [cleaned];
+  const paragraphs: string[] = [];
+  let current = "";
+  for (const sentence of sentences.map((item) => item.trim()).filter(Boolean)) {
+    if (!current) {
+      current = sentence;
+    } else if (`${current} ${sentence}`.length <= 560) {
+      current = `${current} ${sentence}`;
+    } else {
+      paragraphs.push(current);
+      current = sentence;
+    }
+  }
+  if (current) paragraphs.push(current);
+  return paragraphs;
 }
 
 function parseWeeklyDigestRow(digest: WeeklyRow): WeeklyDigestPayload {

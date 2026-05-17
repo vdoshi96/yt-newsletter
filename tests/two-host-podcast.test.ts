@@ -8,9 +8,9 @@ import { weeklyDigestSchema } from "../src/lib/digests/schemas";
 
 describe("two-host podcast scripts", () => {
   it("rotates Gemini host casts by week", () => {
-    expect(getPodcastCastForWeek("2026-05-03").id).toBe("puck_kora");
-    expect(getPodcastCastForWeek("2026-05-10").id).toBe("achird_silafat");
-    expect(getPodcastCastForWeek("2026-05-17").id).toBe("puck_kora");
+    expect(getPodcastCastForWeek("2026-05-03").id).toBe("maya_theo");
+    expect(getPodcastCastForWeek("2026-05-10").id).toBe("nina_jonah");
+    expect(getPodcastCastForWeek("2026-05-17").id).toBe("maya_theo");
   });
 
   it("opens with a source contract and podcast-style host chemistry", () => {
@@ -61,10 +61,10 @@ describe("two-host podcast scripts", () => {
     expect(cast.hosts.secondary.geminiVoice).toBe("Kore");
     expect(lines.some((line) => line.host === "primary")).toBe(true);
     expect(lines.some((line) => line.host === "secondary")).toBe(true);
-    expect(script).toContain("Puck:");
-    expect(script).toContain("Kora:");
-    expect(script).toContain("I'm Puck");
-    expect(script).toContain("I'm Kora");
+    expect(script).toContain("Maya:");
+    expect(script).toContain("Theo:");
+    expect(script).toContain("I'm Maya");
+    expect(script).toContain("I'm Theo");
     expect(script).toContain("source contract");
     expect(script).toContain("transcript-grounded daily digests");
     expect(script).toContain("AI tools are helpers");

@@ -54,6 +54,7 @@ type WeeklyDigestRow = {
   week_end: string;
   title: string;
   full_digest_json: unknown;
+  podcast_script: string | null;
   podcast_audio_asset_id: string | null;
   podcast_status: string | null;
 };
@@ -124,6 +125,7 @@ async function getWeeklyDigests() {
       week_end::text,
       title,
       full_digest_json,
+      podcast_script,
       podcast_audio_asset_id,
       podcast_status
     from weekly_digests
@@ -270,8 +272,11 @@ async function generatePodcastForWeek(input: {
 }) {
   const digest = weeklyDigestSchema.parse(input.row.full_digest_json);
   const cast = getPodcastCastForWeek(input.row.week_start);
-  const lines = buildTwoHostPodcastLines(digest, scriptConfig, cast);
-  const script = formatTwoHostPodcastScript(lines);
+  const storedScript = input.row.podcast_script?.trim();
+  const lines = storedScript
+    ? parseStoredPodcastScript(storedScript, cast)
+    : buildTwoHostPodcastLines(digest, scriptConfig, cast);
+  const script = storedScript || formatTwoHostPodcastScript(lines);
   const wordCount = countWords(script);
   const voiceConfig = buildVoiceConfig(cast);
   const sourceReferences = digest.source_references.length
@@ -393,6 +398,54 @@ async function generatePodcastForWeek(input: {
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }
+}
+
+function parseStoredPodcastScript(script: string, cast: PodcastHostCast): PodcastLine[] {
+  const hostByName = new Map<string, PodcastHostKey>([
+    [cast.hosts.primary.name.toLowerCase(), "primary"],
+    [cast.hosts.secondary.name.toLowerCase(), "secondary"],
+  ]);
+  const paragraphs = script
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+  let fallbackHost: PodcastHostKey = "primary";
+  return paragraphs.map((paragraph, index) => {
+    const match = paragraph.match(/^(?:\*\*)?([A-Za-z][A-Za-z\s'-]{0,40})(?:\*\*)?:\s*([\s\S]+)$/);
+    const parsedHost = match ? hostByName.get(match[1].trim().toLowerCase()) : undefined;
+    const host = parsedHost ?? fallbackHost;
+    const text = (match?.[2] ?? paragraph).trim();
+    fallbackHost = host === "primary" ? "secondary" : "primary";
+    return {
+      host,
+      hostName: cast.hosts[host].name,
+      section: inferPodcastSection(text, index, paragraphs.length),
+      pauseAfterMs: text.includes("[pause]") || text.includes("[beat]") ? 900 : undefined,
+      text,
+    };
+  });
+}
+
+function inferPodcastSection(
+  text: string,
+  index: number,
+  total: number,
+): PodcastLine["section"] {
+  const lower = text.toLowerCase();
+  if (index <= 1) return "cold_open";
+  if (lower.includes("source") || lower.includes("grounded")) return "source_contract";
+  if (lower.includes("market") || lower.includes("executive") || lower.includes("board")) {
+    return "market";
+  }
+  if (lower.includes("research") || lower.includes("evidence")) return "research";
+  if (lower.includes("takeaway") || lower.includes("try this") || lower.includes("next step")) {
+    return "practical";
+  }
+  if (lower.includes("uncertain") || lower.includes("uncertainty") || lower.includes("caveat")) {
+    return "uncertainty";
+  }
+  if (index >= total - 2 || lower.includes("that is the week")) return "closing";
+  return "topic";
 }
 
 async function synthesizeGeminiPodcast(input: {

@@ -33,12 +33,12 @@ export function DigestRenderer({ digest }: { digest: DailyDigestPayload }) {
       <div className="mt-8 grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
         <section className="article-column">
           <h2>Plain English Explanation</h2>
-          <p>{digest.plain_english_explanation}</p>
+          <div className="space-y-3">{renderProseParagraphs(digest.plain_english_explanation)}</div>
         </section>
-        <ExplanationLevelPanel
-          title="CS Background Levels"
-          levels={digest.explanation_levels}
-        />
+        <section className="article-column">
+          <h2>Why this matters</h2>
+          <div className="space-y-3">{renderProseParagraphs(digest.why_it_matters)}</div>
+        </section>
       </div>
 
       <div className="mt-8">
@@ -48,14 +48,10 @@ export function DigestRenderer({ digest }: { digest: DailyDigestPayload }) {
         />
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_0.85fr]">
-        <section className="article-column">
-          <h2>Why this matters</h2>
-          <p>{digest.why_it_matters}</p>
-        </section>
+      <div className="mt-8">
         <section className="article-column">
           <h2>Follow-up from yesterday</h2>
-          <p>{digest.follow_up_from_yesterday}</p>
+          <div className="space-y-3">{renderProseParagraphs(digest.follow_up_from_yesterday)}</div>
         </section>
       </div>
 
@@ -149,48 +145,49 @@ function TranscriptGrounding({ digest }: { digest: DailyDigestPayload }) {
           <dd>{isGrounded ? "Grounded in verified transcript" : "Needs regeneration"}</dd>
         </div>
         <div>
-          <dt className="font-bold text-slate-950">Source</dt>
+          <dt className="font-bold text-slate-950">Transcript source</dt>
           <dd>{grounding.transcript_source}</dd>
         </div>
-        <div>
-          <dt className="font-bold text-slate-950">Transcript length</dt>
-          <dd>{grounding.transcript_length.toLocaleString()} characters</dd>
-        </div>
-        <div>
-          <dt className="font-bold text-slate-950">Video ID</dt>
-          <dd className="break-all">{grounding.video_id}</dd>
-        </div>
-        <div>
-          <dt className="font-bold text-slate-950">Generated</dt>
-          <dd>{grounding.generation_timestamp}</dd>
-        </div>
-        {grounding.transcript_recorded_at ? (
-          <div>
-            <dt className="font-bold text-slate-950">Transcript captured</dt>
-            <dd>{grounding.transcript_recorded_at}</dd>
-          </div>
-        ) : null}
         {grounding.generation_model ? (
           <div>
-            <dt className="font-bold text-slate-950">Model</dt>
+            <dt className="font-bold text-slate-950">Model used</dt>
             <dd>{grounding.generation_model}</dd>
           </div>
         ) : null}
       </dl>
-      <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-        {grounding.key_excerpts.length ? (
-          grounding.key_excerpts.map((excerpt) => (
-            <li key={`${excerpt.timestamp ?? "excerpt"}-${excerpt.quote}`}>
-              {excerpt.timestamp ? (
-                <span className="font-bold text-slate-950">{excerpt.timestamp}: </span>
-              ) : null}
-              <span>{excerpt.quote}</span>
-            </li>
-          ))
-        ) : (
-          <li>No transcript excerpts stored for this digest.</li>
-        )}
-      </ul>
     </section>
   );
+}
+
+function renderProseParagraphs(text: string) {
+  return splitProseParagraphs(text).map((paragraph, index) => (
+    <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>
+  ));
+}
+
+function splitProseParagraphs(text: string) {
+  const explicit = text
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  if (explicit.length > 1) return explicit;
+
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= 520) return cleaned ? [cleaned] : [];
+
+  const sentences = cleaned.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) ?? [cleaned];
+  const paragraphs: string[] = [];
+  let current = "";
+  for (const sentence of sentences.map((item) => item.trim()).filter(Boolean)) {
+    if (!current) {
+      current = sentence;
+    } else if (`${current} ${sentence}`.length <= 520) {
+      current = `${current} ${sentence}`;
+    } else {
+      paragraphs.push(current);
+      current = sentence;
+    }
+  }
+  if (current) paragraphs.push(current);
+  return paragraphs;
 }

@@ -6,7 +6,7 @@ import {
 } from "./config";
 
 export type PodcastHostKey = "primary" | "secondary";
-export type PodcastCastId = "puck_kora" | "achird_silafat";
+export type PodcastCastId = "maya_theo" | "nina_jonah";
 
 export type PodcastCastHost = {
   name: string;
@@ -39,38 +39,38 @@ export type PodcastLine = {
 
 export const podcastHostCasts: PodcastHostCast[] = [
   {
-    id: "puck_kora",
-    label: "Puck and Kora",
+    id: "maya_theo",
+    label: "Maya and Theo",
     hosts: {
       primary: {
-        name: "Puck",
+        name: "Maya",
         geminiVoice: "Puck",
         description:
-          "Upbeat lead host: curious, quick, energetic, and good at making the setup feel lively.",
+          "Curious lead host: warm, quick, precise, and good at making technical stakes feel human.",
       },
       secondary: {
-        name: "Kora",
+        name: "Theo",
         geminiVoice: "Kore",
         description:
-          "Firm analytical co-host: clear, grounded, and willing to challenge a fuzzy claim.",
+          "Analytical co-host: grounded, dry, generous, and willing to slow down a fuzzy claim.",
       },
     },
   },
   {
-    id: "achird_silafat",
-    label: "Achird and Silafat",
+    id: "nina_jonah",
+    label: "Nina and Jonah",
     hosts: {
       primary: {
-        name: "Achird",
+        name: "Nina",
         geminiVoice: "Achird",
         description:
-          "Friendly lead host: warm, conversational, and good at explaining the human stakes.",
+          "Friendly lead host: conversational, observant, and good at finding the practical story.",
       },
       secondary: {
-        name: "Silafat",
+        name: "Jonah",
         geminiVoice: "Sulafat",
         description:
-          "Warm reflective co-host: thoughtful, measured, and good at connecting dots.",
+          "Reflective co-host: thoughtful, measured, and good at connecting technical details to decisions.",
       },
     },
   },
@@ -113,18 +113,18 @@ export function buildTwoHostPodcastLines(
   const lines: PodcastLine[] = [
     makeLine(
       "primary",
-      `Welcome back. I'm ${primary}, and the human question this week is how to use AI without outsourcing judgment. The title on the table is ${digest.title}, but the real job is slower and more useful: make the story legible, keep the evidence visible, and leave with something practical to try.`,
+      `Welcome back. I'm ${primary}. This week is about ${digest.title}, but the real story is what changes when AI stops being a demo and starts touching money, memory, security, pricing, and everyday work.`,
       "cold_open",
       900,
     ),
     makeLine(
       "secondary",
-      `And I'm ${secondary}. I get the delightful job of asking the useful annoying questions: what actually changed, what is still speculative, and what would a careful listener do with this? The week in one grounded sentence: ${digest.what_changed}`,
+      `And I'm ${secondary}. The useful question is not whether the week sounded futuristic. It is what actually changed, what is still speculation, and what a careful listener can do with it. The grounded version is this: ${digest.what_changed}`,
       "cold_open",
     ),
     makeLine(
       "primary",
-      `Before we go anywhere, here is the source contract. This episode is based on ${sourceCount || "the available"} transcript-grounded daily digest${sourceCount === 1 ? "" : "s"} from ${dateWindow}, plus the weekly synthesis stored in the app. We can interpret those sources, but we are not adding outside news, stock calls, or mysterious facts that wandered in from the internet with a tiny suitcase.`,
+      `Before we go anywhere, here is the source contract. This episode is based on ${sourceCount || "the available"} transcript-grounded daily digest${sourceCount === 1 ? "" : "s"} from ${dateWindow}, plus the weekly synthesis stored in the app. We can interpret those sources, but we are not smuggling in unsupported news, stock calls, or convenient facts.`,
       "source_contract",
       700,
     ),
@@ -136,17 +136,17 @@ export function buildTwoHostPodcastLines(
     ),
     makeLine(
       "primary",
-      `For a beginner, the plain-English version is this: ${digest.explanation_levels.beginner}`,
+      `The plain-English shape is this: ${digest.explanation_levels.beginner}`,
       "thesis",
     ),
     makeLine(
       "secondary",
-      `For someone already using AI tools, the practical middle layer is: ${digest.explanation_levels.intermediate}`,
+      `Put into everyday workflow terms, the point becomes: ${digest.explanation_levels.intermediate}`,
       "thesis",
     ),
     makeLine(
       "primary",
-      `And for expert listeners, the deeper frame is: ${digest.explanation_levels.advanced}`,
+      `The deeper systems frame is: ${digest.explanation_levels.advanced}`,
       "thesis",
       1000,
     ),
@@ -355,7 +355,7 @@ function buildDeepDiveExpansion(digest: WeeklyDigestPayload, cast: PodcastHostCa
   lines.push(
     makeLine(
       "secondary",
-      `Let's make this useful for someone who does not live inside AI discourse all day. The dangerous version of a weekly AI recap is a parade of shiny nouns. Very impressive, very caffeinated, and almost useless. The better version asks three boring but powerful questions: what is the job to be done, what evidence says the system helps, and what breaks when the system is wrong? This week, the stored digest says the core change was: ${digest.what_changed}`,
+      `Let's make this useful without assuming the listener lives inside AI discourse all day. The dangerous version of a weekly AI recap is a parade of shiny nouns. Very impressive, very caffeinated, and almost useless. The better version asks three plain questions: what is the job to be done, what evidence says the system helps, and what breaks when the system is wrong? This week, the stored digest says the core change was: ${digest.what_changed}`,
     ),
     makeLine(
       "primary",
@@ -368,7 +368,7 @@ function buildDeepDiveExpansion(digest: WeeklyDigestPayload, cast: PodcastHostCa
     lines.push(
       makeLine(
         index % 2 === 0 ? "secondary" : "primary",
-        `Deep dive ${index + 1}: ${topic.topic}. The digest ranks this because ${topic.why_it_matters} For a wider audience, translate that into a normal-life question: does this help a person make a better decision, learn faster, avoid repeated busywork, or understand a risk before it becomes expensive? If the answer is only "it sounds futuristic," congratulations, we have invented a very expensive press release.`,
+        `Let's spend a minute on ${topic.topic}. The digest ranks this because ${topic.why_it_matters} Translated into normal-life terms, the question is whether this helps a person make a better decision, learn faster, avoid repeated busywork, or understand a risk before it becomes expensive. If the answer is only "it sounds futuristic," we have not found value yet; we have found marketing.`,
       ),
       makeLine(
         index % 2 === 0 ? "primary" : "secondary",
@@ -376,7 +376,7 @@ function buildDeepDiveExpansion(digest: WeeklyDigestPayload, cast: PodcastHostCa
       ),
       makeLine(
         index % 2 === 0 ? "secondary" : "primary",
-        `For a beginner, the concrete example is this: imagine using an AI tool as an assistant for one repeatable task. The first question is not "is it intelligent?" The first question is "can I check the result?" If you cannot check the result, the tool may still be interesting, but it is not ready to quietly take over work that matters. That is not anti-AI; that is pro-not-making-a-mess.`,
+        `A concrete example helps here. Imagine using an AI tool as an assistant for one repeatable task. The first question is not "is it intelligent?" The first question is "can I check the result?" If you cannot check the result, the tool may still be interesting, but it is not ready to quietly take over work that matters.`,
       ),
     );
   }
@@ -384,11 +384,11 @@ function buildDeepDiveExpansion(digest: WeeklyDigestPayload, cast: PodcastHostCa
   lines.push(
     makeLine(
       "primary",
-      `Now the intermediate layer. If you already know a little about APIs, queues, databases, and model calls, this week is about system boundaries. A model answer is only one part of a workflow. You still need input quality, retrieval or context, logging, retry behavior, evaluation, cost controls, and a way for a human to notice when the output is plausible but wrong. The glamorous part is the answer. The useful part is the boring machinery around the answer.`,
+      `Now zoom in on the system boundary. A model answer is only one part of a workflow. You still need input quality, retrieval or context, logging, retry behavior, evaluation, cost controls, and a way for a human to notice when the output is plausible but wrong. The glamorous part is the answer. The useful part is the machinery around the answer.`,
     ),
     makeLine(
       "secondary",
-      `And the advanced layer is where the strategy gets interesting. The weekly digest points toward tradeoffs among capability, observability, cost, and trust. Once AI becomes infrastructure, the question is not simply which model is smartest today. It is which workflow can be evaluated, routed, monitored, rolled back, and paid for without turning into operational fog. The fog is where budgets go to disappear while everyone nods thoughtfully in a meeting.`,
+      `That is where the strategy gets interesting. The weekly digest points toward tradeoffs among capability, observability, cost, and trust. Once AI becomes infrastructure, the question is not simply which model is smartest today. It is which workflow can be evaluated, routed, monitored, rolled back, and paid for without turning into operational fog.`,
     ),
     makeLine(
       "primary",
@@ -420,15 +420,15 @@ function buildDeepDiveExpansion(digest: WeeklyDigestPayload, cast: PodcastHostCa
     ),
     makeLine(
       "secondary",
-      `For a technical listener, the experiment should include instrumentation from the beginning. Save inputs and outputs, write down failure cases, separate model errors from bad instructions, and estimate cost per useful result. Do not wait until the demo becomes a production dependency to discover that nobody logged enough to debug it. That is how "we moved fast" becomes "we moved fast into a wall."`,
+      `Any serious experiment should include instrumentation from the beginning. Save inputs and outputs, write down failure cases, separate model errors from bad instructions, and estimate cost per useful result. Do not wait until the demo becomes a production dependency to discover that nobody logged enough to debug it.`,
     ),
     makeLine(
       "primary",
-      `For an executive listener, the useful question is adoption quality. Are people using the tool because it creates measurable value, or because everyone is politely pretending the pilot is going great? Look for cycle time, rework, customer impact, learning speed, and risk reduction. If the only metric is "number of prompts sent," then the business case is basically confetti with a dashboard.`,
+      `The useful leadership question is adoption quality. Are people using the tool because it creates measurable value, or because everyone is politely pretending the pilot is going great? Look for cycle time, rework, customer impact, learning speed, and risk reduction. If the only metric is "number of prompts sent," the business case is weak.`,
     ),
     makeLine(
       "secondary",
-      `And for someone learning AI from the outside, the best path is still free and concrete. Pick one concept from the week, read an official explanation, watch a free walkthrough if needed, and build a tiny version. If the topic is evaluation, make a five-row scorecard. If the topic is retrieval, make a small notes search. If the topic is agents, diagram the loop: plan, act, observe, revise. Small beats mystical.`,
+      `And the best learning path is still free and concrete. Pick one concept from the week, read an official explanation, watch a free walkthrough if needed, and build a tiny version. If the topic is evaluation, make a five-row scorecard. If the topic is retrieval, make a small notes search. If the topic is agents, diagram the loop: plan, act, observe, revise. Small beats mystical.`,
     ),
   );
 

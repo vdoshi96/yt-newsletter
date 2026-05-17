@@ -24,6 +24,7 @@ Production discovery and processing are split:
 
 - `/api/cron/check-creators` runs hourly and queues missing daily work for newly discovered or previously missed videos.
 - `/api/cron/process-ingest` runs every five minutes and processes queued videos.
+- `/api/cron/generate-weekly-digest` runs on Saturday and publishes completed Saturday-through-Friday weekly digests.
 - `/app/settings` -> `Refresh and run now` runs discovery plus processing for admin/local verification.
 - `POST /api/admin/run-ingest-now` with `CRON_SECRET` also runs discovery plus processing by default; pass `?discover=0` to process only.
 
@@ -35,7 +36,7 @@ Run `npm run backfill:grounded -- --force` to re-discover configured creator bac
 
 Run `npm run weekly:refresh-research` to refresh the starter weekly archive with the curated date-scoped research notes used for the baseline "This Week in AI" editions.
 
-Run `npm run podcasts:generate` to generate up to four Sunday-ready weekly podcast MP3s with the rotating two-host Gemini Flash path. Use `--force`, `--limit=N`, or `--week=YYYY-MM-DD` for backfills.
+Run `npm run podcasts:generate` to generate up to four Sunday-ready weekly podcast MP3s with the rotating two-host Gemini Flash path. Provider-authored scripts default to DeepSeek V4 Pro; Maya/Theo and Nina/Jonah are the user-facing host casts. Use `--force`, `--limit=N`, or `--week=YYYY-MM-DD` for backfills.
 
 ## Verification
 

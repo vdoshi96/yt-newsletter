@@ -17,16 +17,17 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 - Baseline flow for Nate B. Jones that starts with four completed weekly editions
 - Weekly digest archive behavior for completed Saturday-to-Friday weeks
 - Baseline video filtering that excludes Shorts-style and very short clips from the live starter data
-- Daily and weekly digest explanation levels: beginner, intermediate, and advanced
+- Daily and weekly digest explanation levels: beginner, practitioner, and advanced
 - Hourly creator discovery plus five-minute queue processing for fresher daily digests
 - Admin/manual refresh that discovers YouTube uploads and processes the queue
 - 2026-05-01 through 2026-05-16 main long-form daily digests regenerated and audited from verified transcripts
+- DeepSeek V4 Pro primary route for high-quality daily, weekly, and provider-authored podcast scripts
 - Completed May-covering weekly digests regenerated with DeepSeek and source references
 - Completed May-covering weekly podcasts generated as QA-passed Gemini MP3 assets
 - Approximately 30-minute two-host weekly podcast scripts with configurable target length and TTS settings
-- Two-host weekly podcast MP3 generation with Gemini Flash rotating host casts; existing stored MP3s may include earlier Qwen-generated assets
+- Two-host weekly podcast MP3 generation with Gemini Flash rotating Maya/Theo and Nina/Jonah host casts; existing stored MP3s may include earlier Qwen-generated assets
 - Grounded back-catalog regeneration command with force/dry-run controls and idempotent daily/weekly/podcast metadata
-- Weekly digest and podcast calendar navigation
+- Weekly digest and podcast calendar navigation, with weekly archive jumping to the latest published completed edition
 - Prompt files and Zod validation
 - Focused tests for parsing, auth, schemas, progress, and date/video selection
 - Hard transcript-grounding gate for daily digests and safe daily regeneration command

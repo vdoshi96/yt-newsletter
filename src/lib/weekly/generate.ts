@@ -1,4 +1,4 @@
-import { generateWeeklyDigestPayload } from "@/lib/ai";
+import { generatePodcastScriptPayload, generateWeeklyDigestPayload } from "@/lib/ai";
 import { booleanEnv } from "@/lib/config";
 import { getSql } from "@/lib/db";
 import { minimumTranscriptCharacters } from "@/lib/digests/grounding";
@@ -14,7 +14,7 @@ import {
 } from "@/lib/podcasts/config";
 import { uploadGeneratedAsset } from "@/lib/supabase/storage";
 import {
-  getSundayToSaturdayWeekRange,
+  getSaturdayToFridayWeekRange,
   isWeeklyDigestReady,
   type WeeklyRange,
 } from "@/lib/weekly/week-range";
@@ -30,7 +30,7 @@ export async function ensureWeeklyDigestForVideoWeek(input: {
   now?: Date;
 }) {
   if (!input.publishedAt) return null;
-  const range = getSundayToSaturdayWeekRange(input.publishedAt);
+  const range = getSaturdayToFridayWeekRange(input.publishedAt);
   if (!isWeeklyDigestReady(range, input.now)) return null;
 
   return ensureWeeklyDigestForRange({
@@ -49,16 +49,20 @@ export async function ensureCompletedWeeklyDigestsForCreator(input: {
   const rows = await sql<Array<{ digest_date: string }>>`
     select distinct digest_date::text as digest_date
     from daily_digests
-    where creator_id = ${input.creatorId}
-      and grounding_status = 'grounded'
-      and transcript_source = 'youtube_transcript_free'
-      and coalesce(transcript_length, 0) >= ${minTranscriptCharacters}
-    order by digest_date asc
+    join videos on videos.id = daily_digests.video_id
+    where daily_digests.creator_id = ${input.creatorId}
+      and daily_digests.grounding_status = 'grounded'
+      and daily_digests.transcript_source = 'youtube_transcript_free'
+      and coalesce(daily_digests.transcript_length, 0) >= ${minTranscriptCharacters}
+      and coalesce(videos.duration_seconds, 0) >= 300
+      and lower(coalesce(videos.title, '')) not like '%#shorts%'
+      and lower(coalesce(videos.title, '')) not like '% #short %'
+    order by daily_digests.digest_date asc
   `;
 
   const rangesByStart = new Map<string, WeeklyRange>();
   for (const row of rows) {
-    const range = getSundayToSaturdayWeekRange(row.digest_date);
+    const range = getSaturdayToFridayWeekRange(row.digest_date);
     if (isWeeklyDigestReady(range, input.now)) {
       rangesByStart.set(range.weekStart, range);
     }
@@ -96,23 +100,27 @@ export async function ensureWeeklyDigestForRange(input: {
 
   const daily = await sql<WeeklySourceDigest[]>`
     select
-      video_id::text,
-      transcript_id::text,
-      transcript_source,
-      transcript_length,
-      title,
-      front_page_summary,
-      plain_english_explanation,
-      full_digest_json,
-      why_it_matters,
-      digest_date::text
+      daily_digests.video_id::text,
+      daily_digests.transcript_id::text,
+      daily_digests.transcript_source,
+      daily_digests.transcript_length,
+      daily_digests.title,
+      daily_digests.front_page_summary,
+      daily_digests.plain_english_explanation,
+      daily_digests.full_digest_json,
+      daily_digests.why_it_matters,
+      daily_digests.digest_date::text
     from daily_digests
-    where creator_id = ${input.creatorId}
-      and digest_date between ${weekStart} and ${weekEnd}
-      and grounding_status = 'grounded'
-      and transcript_source = 'youtube_transcript_free'
-      and coalesce(transcript_length, 0) >= ${minTranscriptCharacters}
-    order by digest_date asc, created_at asc
+    join videos on videos.id = daily_digests.video_id
+    where daily_digests.creator_id = ${input.creatorId}
+      and daily_digests.digest_date between ${weekStart} and ${weekEnd}
+      and daily_digests.grounding_status = 'grounded'
+      and daily_digests.transcript_source = 'youtube_transcript_free'
+      and coalesce(daily_digests.transcript_length, 0) >= ${minTranscriptCharacters}
+      and coalesce(videos.duration_seconds, 0) >= 300
+      and lower(coalesce(videos.title, '')) not like '%#shorts%'
+      and lower(coalesce(videos.title, '')) not like '% #short %'
+    order by daily_digests.digest_date asc, daily_digests.created_at asc
   `;
   if (!daily.length) return existing[0]?.id ?? null;
 
@@ -129,21 +137,49 @@ export async function ensureWeeklyDigestForRange(input: {
   });
   const cast = getPodcastCastForWeek(weekStart);
   const scriptConfig = getPodcastScriptConfig();
-  const podcastScript = formatTwoHostPodcastScript(
+  const fallbackPodcastScript = formatTwoHostPodcastScript(
     buildTwoHostPodcastLines(generatedPayload, scriptConfig, cast),
   );
+  const podcastPrompt = await loadPrompt("podcast_script");
+  let podcastScript = fallbackPodcastScript;
+  let providerPodcastGeneration: Record<string, unknown> = {
+    status: "script_generated",
+    provider: "local",
+    model: "deterministic:two-host-builder",
+    generated_at: new Date().toISOString(),
+  };
+  if (scriptConfig.generationMode === "provider_script") {
+    try {
+      const providerScript = await generatePodcastScriptPayload({
+        creatorId: input.creatorId,
+        weekStart,
+        weekEnd,
+        weeklyDigest: generatedPayload,
+        sourceText,
+        prompt: podcastPrompt,
+        hostNames: cast.label,
+      });
+      podcastScript = providerScript.podcast_script;
+      providerPodcastGeneration = providerScript.podcast_generation;
+    } catch (error) {
+      console.warn("[podcast:provider-script-fallback]", {
+        creatorId: input.creatorId,
+        weekStart,
+        message: (error as Error).message,
+      });
+    }
+  }
   const payload = {
     ...generatedPayload,
     source_references: sourceReferences,
     podcast_script: podcastScript,
     podcast_generation: {
       ...generatedPayload.podcast_generation,
-      status: "script_generated",
+      ...providerPodcastGeneration,
       target_minutes: scriptConfig.targetMinutes,
       words_per_minute: scriptConfig.wordsPerMinute,
       word_count: countWords(podcastScript),
       cast_id: cast.id,
-      generated_at: new Date().toISOString(),
       source_references: sourceReferences,
     },
   };

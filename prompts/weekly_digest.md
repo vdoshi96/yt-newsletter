@@ -1,4 +1,4 @@
-Create a long-form "This Week in AI" digest for one YouTube creator covering the previous weekend plus Monday through Friday of the same week.
+Create a long-form "This Week in AI" digest for one YouTube creator covering a completed Saturday-through-Friday week.
 
 Return JSON only. Do not include Markdown fences.
 
@@ -20,13 +20,15 @@ Schema keys:
 - free_learning_plan: string[]
 
 Editorial shape:
-- Make this feel like a weekly newspaper section, not a concatenation or shorter recap of daily digests.
-- Synthesize major themes, recurring concepts, important updates, practical takeaways, and unresolved questions across the week.
-- Treat the weekly edition as a DeepSeek research-style deep dive over the supplied daily digests: explain the underlying technical concepts, adjacent product, market, governance, and operational ideas, and the practical implications that are directly supported by the source material.
+- Make this feel like a deeply reported technology newspaper feature, closer to a serious publication than a bullet-point AI summary.
+- Do not merely regurgitate daily digests. Synthesize across the week, explain what was under-explained, add missing context from supplied date-scoped research notes, connect related technologies and companies when the supplied notes support it, and make clear why the week mattered.
+- Each major section must add distinct value. Avoid repeating the same "uncertainty plus TL;DR" point in multiple places. If two sections would say the same thing, merge them or make one more analytical.
+- Treat the weekly edition as a research-style deep dive over the supplied daily digests: explain underlying technical concepts, adjacent product, market, governance, and operational ideas, and the practical implications that are directly supported by the source material.
 - Adjacent-topic analysis is allowed only as bounded interpretation from the supplied daily digests, transcript-grounding notes, quote anchors, and date-scoped research notes. Do not introduce unsupplied news, company facts, prices, benchmarks, or market claims.
+- When reputable external research notes are supplied, cite or ground the claims through `research_briefs` and `source_notes`. If they are not supplied, say the external research layer is unavailable and keep broader claims conservative.
 - Keep the JSON complete and parseable. Dense, source-bounded synthesis is better than very long prose that risks truncation.
-- Target lengths: `newsletter_markdown` 900-1400 words; each explanation level 180-300 words; `executive_insights_memo` 180-300 words; `market_investment_lens` 250-450 words; each research brief field 1-3 concise paragraphs or bullets.
-- Cover about 10 AI posts for the week: videos, guides, how-to items, research notes, market items, and practical exercises. If there are fewer than 10 source-backed items, create learning-oriented posts from the supplied sources and explicitly mark the limitation.
+- Target lengths: `newsletter_markdown` 1200-1800 words; each explanation level 220-380 words; `executive_insights_memo` 220-380 words; `market_investment_lens` 300-550 words; each research brief field 1-3 substantive paragraphs or precise bullets.
+- `weekly_posts` is only an internal source index. Keep it compact and source-bounded; do not spend the main editorial energy on a clickable list of posts.
 - Include a board-level executive insights memo focused on AI strategy, markets, infrastructure, investments, budget risk, and adoption risk.
 - `market_investment_lens` must be meaningfully elaborated, usually 2-4 substantive paragraphs when the sources support it. Explain broader market, ecosystem, product, funding, company, infrastructure, or industry implications without filler.
 - Include deeper research briefs on the most important topics for the week. Each research brief needs context, background, why it matters, practical interpretation, evidence, implications, and uncertainty. Avoid two-line briefs.
@@ -45,8 +47,7 @@ Rules:
 - Avoid hype and paid-course funnels.
 - Prefer free docs, papers, free videos, search terms, exercises, and small projects.
 - Mark uncertainty and source limitations clearly.
-- Use dates in source notes.
+- `source_notes` are internal grounding aids. Use dates, but keep them terse; do not create a user-facing "grounded source notes" essay.
 - For source notes tied to daily digests, set `label` to `Daily digest: <exact Title from SOURCE DIGESTS>`.
 - Do not recommend paid courses unless clearly marked optional.
 - If date-scoped external research notes are not supplied, say the external research layer is unavailable and keep market/investment claims conservative.
-- The podcast script should sound conversational and cautious, with two hosts discussing the week like a smart markets-and-AI show rather than reading bullets.

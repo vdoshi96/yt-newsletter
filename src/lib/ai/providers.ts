@@ -8,6 +8,8 @@ export async function callChatProvider(input: {
   messages: ChatMessage[];
   responseFormat?: "json_object" | "text";
   maxTokens?: number;
+  reasoningEffort?: "high" | "max";
+  timeoutMs?: number;
 }): Promise<JsonChatResult> {
   if (input.provider === "gemini") {
     return callGemini(input);
@@ -21,14 +23,23 @@ async function callOpenAiCompatible(input: {
   messages: ChatMessage[];
   responseFormat?: "json_object" | "text";
   maxTokens?: number;
+  reasoningEffort?: "high" | "max";
+  timeoutMs?: number;
 }) {
   const { apiKey, baseUrl } = getOpenAiCompatibleConfig(input.provider);
   if (!apiKey) throw new Error(`Missing API key for ${input.provider}.`);
   const body: Record<string, unknown> = {
     model: input.model,
     messages: input.messages,
-    temperature: 0.2,
   };
+  if (usesDeepSeekThinking(input.provider, input.model)) {
+    body.thinking = { type: "enabled" };
+    body.reasoning_effort = input.reasoningEffort ?? "high";
+  } else if (input.provider === "kimi") {
+    body.temperature = 1;
+  } else {
+    body.temperature = 0.2;
+  }
   if (input.responseFormat === "json_object" && supportsJsonResponseFormat(input.provider)) {
     body.response_format = { type: "json_object" };
   }
@@ -36,7 +47,7 @@ async function callOpenAiCompatible(input: {
     body.max_tokens = input.maxTokens;
   }
 
-  const timeout = createProviderTimeout();
+  const timeout = createProviderTimeout(input.provider, input.timeoutMs);
   try {
     const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
@@ -47,16 +58,22 @@ async function callOpenAiCompatible(input: {
       signal: timeout.signal,
       body: JSON.stringify(body),
     });
+    const responseBody = await response.text();
 
     if (!response.ok) {
-      throw new Error(`${input.provider} request failed: ${response.status}`);
+      throw new Error(
+        `${input.provider}:${input.model} request failed: ${response.status} ${truncateProviderBody(responseBody)}`,
+      );
     }
 
-    const json = (await response.json()) as {
+    const json = JSON.parse(responseBody) as {
       choices?: Array<{ message?: { content?: string } }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
     const text = json.choices?.[0]?.message?.content ?? "";
+    if (!text.trim()) {
+      throw new Error(`${input.provider}:${input.model} returned empty content.`);
+    }
     return {
       text,
       inputTokens: json.usage?.prompt_tokens ?? estimateTokens(JSON.stringify(input.messages)),
@@ -74,12 +91,13 @@ async function callGemini(input: {
   model: string;
   messages: ChatMessage[];
   maxTokens?: number;
+  timeoutMs?: number;
 }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("Missing GEMINI_API_KEY.");
 
   const prompt = input.messages.map((message) => `${message.role}: ${message.content}`).join("\n\n");
-  const timeout = createProviderTimeout();
+  const timeout = createProviderTimeout("gemini", input.timeoutMs);
   try {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${input.model}:generateContent?key=${apiKey}`,
@@ -98,15 +116,22 @@ async function callGemini(input: {
       },
     );
 
+    const responseBody = await response.text();
+
     if (!response.ok) {
-      throw new Error(`Gemini request failed: ${response.status}`);
+      throw new Error(
+        `Gemini:${input.model} request failed: ${response.status} ${truncateProviderBody(responseBody)}`,
+      );
     }
 
-    const json = (await response.json()) as {
+    const json = JSON.parse(responseBody) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
       usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
     };
     const text = json.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
+    if (!text.trim()) {
+      throw new Error(`Gemini:${input.model} returned empty content.`);
+    }
     return {
       text,
       inputTokens: json.usageMetadata?.promptTokenCount ?? estimateTokens(prompt),
@@ -120,8 +145,12 @@ async function callGemini(input: {
   }
 }
 
-function createProviderTimeout() {
-  const timeoutMs = numberEnv("AI_PROVIDER_TIMEOUT_MS", 300_000);
+function createProviderTimeout(provider: AiProvider, overrideMs?: number) {
+  const timeoutMs =
+    overrideMs ??
+    (provider === "deepseek"
+      ? numberEnv("DEEPSEEK_PROVIDER_TIMEOUT_MS", numberEnv("AI_PROVIDER_TIMEOUT_MS", 600_000))
+      : numberEnv("AI_PROVIDER_TIMEOUT_MS", 300_000));
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   return {
@@ -140,6 +169,16 @@ function normalizeProviderError(provider: AiProvider, error: unknown, timeoutMs:
 
 function supportsJsonResponseFormat(provider: AiProvider) {
   return provider !== "kimi";
+}
+
+function usesDeepSeekThinking(provider: AiProvider, model: string) {
+  return provider === "deepseek" && model.startsWith("deepseek-v4-");
+}
+
+function truncateProviderBody(body: string) {
+  const cleaned = body.replace(/\s+/g, " ").trim();
+  if (!cleaned) return "(empty response body)";
+  return cleaned.length > 500 ? `${cleaned.slice(0, 500)}...` : cleaned;
 }
 
 function getOpenAiCompatibleConfig(provider: AiProvider) {

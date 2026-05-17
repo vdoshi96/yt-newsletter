@@ -6,11 +6,11 @@ import {
 import { dailyDigestSchema } from "../src/lib/digests/schemas";
 
 describe("daily digest explanation structure", () => {
-  it("uses one shared plain-English section and three CS-background levels", () => {
+  it("uses one shared plain-English section and three proficiency levels", () => {
     expect(EXPLANATION_LEVEL_LABELS).toEqual({
-      beginner: "Level 1: Beginner CS Background",
-      intermediate: "Level 2: Intermediate CS Background",
-      advanced: "Level 3: Advanced CS / AI Systems Background",
+      beginner: "Beginner",
+      intermediate: "Practitioner",
+      advanced: "Advanced",
     });
 
     const parsed = dailyDigestSchema.parse({
@@ -20,10 +20,10 @@ describe("daily digest explanation structure", () => {
       front_page_summary: "The transcript covered agents, evals, retrieval, and production checks.",
       plain_english_explanation: "AI apps need the same careful checks as other software.",
       explanation_levels: {
-        beginner: "For a beginner CS reader, an agent is code that loops through steps.",
-        intermediate: "For an intermediate CS reader, the digest maps agents to APIs, queues, DB state, and evals.",
+        beginner: "For a curious reader, an agent is code that loops through steps.",
+        intermediate: "For a practitioner, the digest maps agents to APIs, queues, DB state, and evals.",
         advanced:
-          "For an advanced AI systems reader, the digest covers orchestration, retrieval, observability, routing, and failure modes.",
+          "For an advanced reader, the digest covers orchestration, retrieval, observability, routing, and failure modes.",
       },
       full_level_versions: {
         beginner:
@@ -69,7 +69,7 @@ describe("daily digest explanation structure", () => {
     });
 
     expect(parsed.plain_english_explanation).not.toBe(parsed.explanation_levels.beginner);
-    expect(parsed.explanation_levels.beginner).toContain("beginner CS reader");
+    expect(parsed.explanation_levels.beginner).toContain("curious reader");
     expect(parsed.full_level_versions.beginner).toContain("beginners");
     expect(parsed.full_level_versions.advanced).toContain("production agent stacks");
     expect(parsed.concepts_to_learn.advanced).toContain("Model routing");

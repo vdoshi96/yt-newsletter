@@ -2,10 +2,11 @@
 
 ## Cron and Ingestion Flow
 
-Production uses two Vercel Cron entries:
+Production uses three Vercel Cron entries:
 
 - `/api/cron/check-creators` runs hourly at minute 2. It discovers recent uploads for every linked creator, upserts the latest videos, and queues any video that does not already have a daily digest or an open ingest item.
 - `/api/cron/process-ingest` runs every five minutes. It fetches verified YouTube transcripts, generates the daily digest only after transcript validation passes, writes it idempotently by `video_id`, and then checks whether completed weekly digests are now available.
+- `/api/cron/generate-weekly-digest` runs on Saturday and explicitly refreshes completed Saturday-through-Friday weekly editions.
 
 This means a newly published YouTube video should be discovered within about one hour and processed on the next five-minute queue run. If the hourly discovery cron is missed, the next hourly run recovers because discovery also checks already-known videos that are missing daily digests.
 
@@ -53,8 +54,10 @@ Transcript retry configuration:
 - `TRANSCRIPT_RETRY_MINUTES` controls how soon a missing transcript is retried. Default: `60`.
 - `TRANSCRIPT_MAX_RETRY_ATTEMPTS` controls how many transcript-missing attempts are allowed before the item becomes terminally failed. Default: `48`.
 - `MAX_VIDEOS_PROCESSED_PER_CRON_RUN` should stay at `1` for cron reliability; provider fallback can take long enough that multi-item HTTP runs risk hitting the route `maxDuration`.
-- `AI_PROVIDER_TIMEOUT_MS` controls provider request timeout. Default: `300000` so DeepSeek can spend up to five minutes on higher-quality daily and weekly text output.
-- `WEEKLY_AI_MAX_OUTPUT_TOKENS` controls the weekly model output budget. Default: `12000` so source-backed deep dives are less likely to truncate into invalid JSON.
+- `AI_PROVIDER_TIMEOUT_MS` controls provider request timeout for non-DeepSeek routes. Default: `300000`.
+- `DEEPSEEK_PROVIDER_TIMEOUT_MS` controls DeepSeek request timeout. Default: `600000` so V4 Pro can spend up to ten minutes on higher-quality daily, weekly, and podcast text output.
+- `DAILY_AI_MAX_OUTPUT_TOKENS` is optional. Leave it unset so the app does not impose an extra daily output cap beyond provider/model limits.
+- `WEEKLY_AI_MAX_OUTPUT_TOKENS` is optional. Leave it unset so the app does not impose an extra weekly output cap beyond provider/model limits.
 
 Stored transcript/digest metadata includes transcript length, transcript source hash, extraction metadata, extraction timestamp, generation model, generation timestamp, grounding status, source references, and processing status. The canonical processing states are `pending`, `transcript_missing`, `transcript_ready`, `digest_generated`, `podcast_generated`, and `failed`.
 
@@ -68,11 +71,11 @@ See [Daily Digest Grounding Incident: 2026-05-09](daily-digest-grounding-inciden
 
 ## Digest Prompt Behavior
 
-Daily and weekly prompts require visibly different explanation depths. Daily digests also keep the shared Plain English Explanation separate from the three CS-background levels:
+Daily and weekly prompts require visibly different explanation depths. Daily digests keep the shared Plain English Explanation separate from the full proficiency versions:
 
-- Level 1: Beginner CS Background, for readers with basic coding knowledge.
-- Level 2: Intermediate CS Background, for readers comfortable with APIs, backend systems, databases, queues, embeddings, evals, and LLM basics.
-- Level 3: Advanced CS / AI Systems Background, for readers comfortable with agentic systems, inference pipelines, retrieval, model routing, observability, and production ML/LLM failure modes.
+- Beginner, for curious readers who need plain-language foundations.
+- Practitioner, for readers comfortable with products, workflows, APIs, costs, evals, and LLM basics.
+- Advanced, for readers comfortable with agentic systems, inference pipelines, retrieval, model routing, observability, and production ML/LLM failure modes.
 
 The skepticism section must not use the phrase "AI-derived notes from YouTube transcripts." Stored digests are also cleaned at parse time so older rows do not keep showing that wording.
 
@@ -80,20 +83,20 @@ Weekly digests use Saturday-through-Friday windows, so the edition that appears 
 
 ## Podcast Generation
 
-Weekly podcast scripts are generated as a long-form two-host deep dive from the stored weekly digest. The deterministic builder is the canonical production path, so the weekly model does not need to return the final script. The generated script includes a human-stakes cold open, source contract, three audience-depth explanations, source-backed topic arcs, market/operator lens, research desk, practical takeaways, an uncertainty ledger, and closing.
+Weekly podcast scripts are generated as a long-form two-host deep dive from the stored weekly digest. The default script path asks DeepSeek V4 Pro for a natural Maya/Theo-style episode and falls back to the deterministic two-host builder only after the provider route is exhausted. The generated script should feel like one coherent conversation rather than three audience-level explanations stitched together.
 
 Configuration:
 
 - `PODCAST_SCRIPT_TARGET_MINUTES` controls script length target. Default: `30`.
 - `PODCAST_SCRIPT_WORDS_PER_MINUTE` controls word target math. Default: `145`.
-- `PODCAST_GENERATION_MODE` defaults to `two_host_deep_dive`.
+- `PODCAST_GENERATION_MODE` defaults to `provider_script`.
 - `PODCAST_TTS_PROVIDER` defaults to `gemini_flash`.
 - `GEMINI_TTS_MODEL` or `PODCAST_TTS_MODEL` selects the Gemini Flash TTS model.
-- Gemini host casts rotate by week between Puck/Kora (`Puck` + `Kore`) and Achird/Silafat (`Achird` + `Sulafat`).
+- Gemini host casts rotate by week between Maya/Theo (`Puck` + `Kore`) and Nina/Jonah (`Achird` + `Sulafat`).
 - `PODCAST_FEMALE_VOICE` / `PODCAST_MALE_VOICE` only apply to the optional Qwen voice-designed path.
 - `PODCAST_AUDIO_BITRATE` controls MP3 export bitrate for `npm run podcasts:generate`. Default: `128k`.
 
-`npm run podcasts:generate` is the preferred high-quality path because it uses Gemini Flash native multi-speaker TTS by default and stores an MP3 in Supabase. By default it selects up to four Sunday-ready weekly podcasts; use `--limit=N`, `--week=YYYY-MM-DD`, `--force`, or `--include-not-ready` when backfilling. Podcast metadata stores provider, model, cast/voice config, target minutes, word count, source references, audio QA, generation status, and failures. Audio QA probes the MP3 duration, codec, file size, pacing, and rejects obviously truncated or malformed audio before publishing a public asset URL.
+`npm run podcasts:generate` is the preferred high-quality audio path because it uses Gemini Flash native multi-speaker TTS by default and stores an MP3 in Supabase. By default it selects up to four Sunday-ready weekly podcasts; use `--limit=N`, `--week=YYYY-MM-DD`, `--force`, or `--include-not-ready` when backfilling. Podcast metadata stores provider, model, cast/voice config, target minutes, word count, source references, audio QA, generation status, and failures internally. Listener-facing pages hide those operational details.
 
 NotebookLM currently has no stable app API for automated generation from this app. Treat NotebookLM as a manual external production option; the automated path here is the best feasible stack-native alternative.
 
@@ -101,7 +104,7 @@ NotebookLM currently has no stable app API for automated generation from this ap
 
 Weekly digest and podcast pages accept `week=YYYY-MM-DD`. Any selected date is normalized to the app's Saturday-through-Friday week start. If no week is supplied, the pages select the latest stored week and fall back to the current Saturday.
 
-Both weekly pages include a `Jump to current` control. If no digest or podcast exists for the selected week, the page shows an empty state instead of rendering the wrong archive item.
+The weekly digest page includes a `Jump to latest published` control. The podcast page includes a `Jump to latest available` control. If no digest or podcast exists for the selected week, the page shows an empty state instead of rendering the wrong archive item.
 
 Weekly story cards link to `/app/daily?creatorId=...&date=...` using the story date. If no daily digest exists for that date, the daily page shows its existing empty state.
 

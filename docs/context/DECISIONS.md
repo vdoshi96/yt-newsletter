@@ -26,7 +26,7 @@ Creator discovery runs hourly and queue processing runs every five minutes. Disc
 
 ## 2026-05-09: Podcast Quality Path
 
-The automated high-quality podcast path is `npm run podcasts:generate`, using an approximately 30-minute two-host script and Gemini Flash native multi-speaker TTS by default. Host casts rotate weekly between Puck/Kora and Achird/Silafat. The older Qwen voice-designed segmented path remains available as an explicit provider. Podcast generation selects Sunday-ready weeks by default, stores provider/model/voice metadata, and marks audio failures without presenting placeholders as final audio. NotebookLM is documented as manual because it does not expose a stable app API for this workflow.
+The automated high-quality podcast path is `npm run podcasts:generate`, using an approximately 30-minute two-host script and Gemini Flash native multi-speaker TTS by default. Host casts rotate weekly between Maya/Theo and Nina/Jonah while preserving the Gemini voice IDs underneath. The older Qwen voice-designed segmented path remains available as an explicit provider. Podcast generation selects Sunday-ready weeks by default, stores provider/model/voice metadata, and marks audio failures without presenting placeholders as final audio. NotebookLM is documented as manual because it does not expose a stable app API for this workflow.
 
 ## 2026-05-09: Weekly Calendar Navigation
 
@@ -35,3 +35,11 @@ Weekly digest and podcast pages use a `week=YYYY-MM-DD` query parameter that nor
 ## 2026-05-09: Grounded Back-Catalog Regeneration
 
 Back-catalog regeneration is driven by `npm run backfill:grounded`. The command re-discovers configured creator catalogs, queues videos that are missing grounded daily digests, optionally force-regenerates trusted rows, and refreshes weekly digests after daily processing. It stores queryable transcript, digest, weekly, podcast, and asset metadata while preserving the hard rule that missing transcripts block final content instead of falling back to titles.
+
+## 2026-05-16: DeepSeek V4 Pro Editorial Path
+
+Daily digests, weekly digests, and provider-generated podcast scripts use `deepseek-v4-pro` as the primary high-quality route. The DeepSeek request path explicitly enables thinking mode, omits temperature for thinking requests, allows a longer DeepSeek timeout, does not impose an app-level daily/weekly output cap unless explicitly configured, retries the primary route before fallback, and logs provider/model/attempt metadata. Dashboard daily counts are scoped to grounded long-form digests from the latest 30 days instead of historical rows.
+
+## 2026-05-16: Weekly Publication Navigation
+
+Weekly digest generation has an explicit Saturday cron route at `/api/cron/generate-weekly-digest`. The weekly page jumps to the latest stored published Saturday-through-Friday edition rather than the current in-progress week, so the Saturday publication for the prior completed week remains visible.
