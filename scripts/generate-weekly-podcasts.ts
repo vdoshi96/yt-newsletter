@@ -45,7 +45,7 @@ const ttsModel =
 const geminiModel =
   audioConfig.provider === "gemini_flash"
     ? audioConfig.ttsModel
-    : process.env.GEMINI_TTS_MODEL ?? "gemini-2.5-flash-preview-tts";
+    : process.env.GEMINI_TTS_MODEL ?? "gemini-3.1-flash-tts-preview";
 
 type WeeklyDigestRow = {
   id: string;
@@ -308,7 +308,10 @@ async function generatePodcastForWeek(input: {
     const outputPath = path.join(workDir, "podcast.mp3");
 
     if (audioConfig.provider === "gemini_flash") {
-      const ttsChunks = groupPodcastLinesForTts(splitPodcastLinesForTts(lines), 1_600);
+      const ttsChunks = groupPodcastLinesForTts(
+        splitPodcastLinesForTts(lines, audioConfig.geminiLineMaxCharacters),
+        audioConfig.geminiChunkMaxCharacters,
+      );
       const segmentPaths: string[] = [];
       for (let index = 0; index < ttsChunks.length; index += 1) {
         const chunk = ttsChunks[index];

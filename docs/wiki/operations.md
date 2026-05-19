@@ -91,7 +91,9 @@ Configuration:
 - `PODCAST_SCRIPT_WORDS_PER_MINUTE` controls word target math. Default: `145`.
 - `PODCAST_GENERATION_MODE` defaults to `provider_script`.
 - `PODCAST_TTS_PROVIDER` defaults to `gemini_flash`.
-- `GEMINI_TTS_MODEL` or `PODCAST_TTS_MODEL` selects the Gemini Flash TTS model.
+- `GEMINI_TTS_MODEL` or `PODCAST_TTS_MODEL` selects the Gemini Flash TTS model. Default: `gemini-3.1-flash-tts-preview`.
+- `GEMINI_TTS_CHUNK_MAX_CHARACTERS` controls Gemini multi-speaker TTS chunk size. Default: `4800`, which reduces quota burn while still splitting long scripts for audio consistency.
+- `GEMINI_TTS_LINE_MAX_CHARACTERS` controls the maximum single host line size before sentence splitting. Default: `1800`.
 - Gemini host casts rotate by week between Maya/Theo (`Puck` + `Kore`) and Nina/Jonah (`Achird` + `Sulafat`).
 - `PODCAST_FEMALE_VOICE` / `PODCAST_MALE_VOICE` only apply to the optional Qwen voice-designed path.
 - `PODCAST_AUDIO_BITRATE` controls MP3 export bitrate for `npm run podcasts:generate`. Default: `128k`.

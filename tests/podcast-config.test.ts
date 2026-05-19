@@ -17,7 +17,21 @@ describe("podcast audio config", () => {
 
     expect(getPodcastAudioConfig()).toMatchObject({
       provider: "gemini_flash",
-      ttsModel: "gemini-2.5-flash-preview-tts",
+      ttsModel: "gemini-3.1-flash-tts-preview",
+      geminiChunkMaxCharacters: 4800,
+      geminiLineMaxCharacters: 1800,
+    });
+  });
+
+  it("allows Gemini TTS chunk sizes to be tuned without changing the provider", () => {
+    vi.stubEnv("PODCAST_TTS_PROVIDER", "gemini_flash");
+    vi.stubEnv("GEMINI_TTS_CHUNK_MAX_CHARACTERS", "7200");
+    vi.stubEnv("GEMINI_TTS_LINE_MAX_CHARACTERS", "2400");
+
+    expect(getPodcastAudioConfig()).toMatchObject({
+      provider: "gemini_flash",
+      geminiChunkMaxCharacters: 7200,
+      geminiLineMaxCharacters: 2400,
     });
   });
 

@@ -19,6 +19,8 @@ export type PodcastAudioConfig = {
   voiceDesignModel: string;
   femaleVoice: string | null;
   maleVoice: string | null;
+  geminiChunkMaxCharacters: number;
+  geminiLineMaxCharacters: number;
   audioBitrate: string;
 };
 
@@ -41,7 +43,7 @@ export function getPodcastAudioConfig(): PodcastAudioConfig {
     ttsModel:
       cleanOptional(process.env.PODCAST_TTS_MODEL) ??
       (provider === "gemini_flash"
-        ? cleanOptional(process.env.GEMINI_TTS_MODEL) ?? "gemini-2.5-flash-preview-tts"
+        ? cleanOptional(process.env.GEMINI_TTS_MODEL) ?? "gemini-3.1-flash-tts-preview"
         : cleanOptional(process.env.QWEN_TTS_MODEL) ?? "qwen3-tts-vd-2026-01-26"),
     voiceDesignModel: process.env.QWEN_VOICE_DESIGN_MODEL ?? "qwen-voice-design",
     femaleVoice:
@@ -50,6 +52,8 @@ export function getPodcastAudioConfig(): PodcastAudioConfig {
     maleVoice:
       cleanOptional(process.env.PODCAST_MALE_VOICE) ??
       cleanOptional(process.env.QWEN_PODCAST_MALE_VOICE),
+    geminiChunkMaxCharacters: numberEnv("GEMINI_TTS_CHUNK_MAX_CHARACTERS", 4800),
+    geminiLineMaxCharacters: numberEnv("GEMINI_TTS_LINE_MAX_CHARACTERS", 1800),
     audioBitrate: process.env.PODCAST_AUDIO_BITRATE ?? "128k",
   };
 }
