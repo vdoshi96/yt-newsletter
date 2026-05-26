@@ -29,6 +29,31 @@ describe("ingestion idempotency SQL safeguards", () => {
     expect(processor).toMatch(/existing\[0\][\s\S]+isGroundedDailyDigestRow/i);
   });
 
+  it("does not let failed daily digest rows suppress future discovery retries", () => {
+    const processor = readFileSync(join(process.cwd(), "src/lib/processor.ts"), "utf8");
+
+    expect(processor).toMatch(/exists\([\s\S]+from daily_digests[\s\S]+grounding_status = 'grounded'[\s\S]+processing_status = 'digest_generated'[\s\S]+\) as has_daily_digest/i);
+  });
+
+  it("reconciles waiting transcript rows when a completed transcript exists", () => {
+    const processor = readFileSync(join(process.cwd(), "src/lib/processor.ts"), "utf8");
+
+    expect(processor).toMatch(/transcripts\.status = 'completed'[\s\S]+transcripts\.needs_retry = true/i);
+    expect(processor).toContain("queue-scan-candidates");
+  });
+
+  it("ships a dry-run-first recovery command for wedged transcript rows", () => {
+    const packageJson = readFileSync(join(process.cwd(), "package.json"), "utf8");
+    const script = readFileSync(join(process.cwd(), "scripts/recover-ingest-transcripts.ts"), "utf8");
+
+    expect(packageJson).toContain('"ingest:recover"');
+    expect(script).toContain("const apply = args.has(\"apply\")");
+    expect(script).toContain("Dry run");
+    expect(script).toContain("waitingWithCompletedTranscript");
+    expect(script).toContain("terminalFailedFetchableTranscript");
+    expect(script).toContain("nonGroundedDailyRows");
+  });
+
   it("marks non-grounded daily placeholders failed when digest generation fails", () => {
     const processor = readFileSync(join(process.cwd(), "src/lib/processor.ts"), "utf8");
 

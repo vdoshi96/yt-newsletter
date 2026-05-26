@@ -72,11 +72,15 @@ NEXT_PUBLIC_APP_URL
 SUPABASE_STORAGE_BUCKET
 MONTHLY_AI_BUDGET_USD
 AI_PROVIDER_TIMEOUT_MS
+DEEPSEEK_PROVIDER_TIMEOUT_MS
 MAX_BACKFILL_VIDEOS_PER_JOB
 BASELINE_MONTH_VIDEO_LOOKBACK_LIMIT
 BASELINE_MIN_VIDEO_DURATION_SECONDS
 MAX_VIDEOS_PROCESSED_PER_CRON_RUN
 TRANSCRIPT_RETRY_MINUTES
+TRANSCRIPT_MAX_RETRY_ATTEMPTS
+TRANSCRIPT_EXTENDED_RETRY_SECONDS
+TRANSCRIPT_FETCH_TIMEOUT_MS
 GENERATE_IMAGES
 GENERATE_AUDIO
 DEEPSEEK_DAILY_MODEL
@@ -86,7 +90,7 @@ KIMI_WEEKLY_MODEL
 WEEKLY_AI_MAX_OUTPUT_TOKENS
 ```
 
-`AI_PROVIDER_TIMEOUT_MS` defaults to `300000` so daily and weekly text generation can wait up to five minutes. Daily and weekly text generation route to DeepSeek first, with provider fallbacks only after validation or request failure.
+`AI_PROVIDER_TIMEOUT_MS` defaults to `300000` for non-DeepSeek providers. `DEEPSEEK_PROVIDER_TIMEOUT_MS` defaults to `600000` so the V4 Pro quality route can take longer than generic fallbacks while staying inside the longer generation route budgets.
 
 Do not commit `.env.local`.
 
@@ -133,12 +137,13 @@ From the command line:
 
 ```bash
 npm run ingest:process
+npm run ingest:recover -- --dry-run
 npm run daily:refresh-follow-ups
 npm run weekly:refresh-research
 npm run podcasts:generate
 ```
 
-`npm run daily:refresh-follow-ups` rebuilds stored daily "follow-up from yesterday" text from the nearest prior daily digest for each creator. `npm run weekly:refresh-research` refreshes the starter weekly archive with date-scoped research notes and richer "This Week in AI" sections. `npm run podcasts:generate` uses Qwen voice design/TTS to create two-host weekly podcast MP3s for every stored weekly digest, then uploads them to Supabase Storage. The generated voices are described as a British-accented female host and an American-accented male host; they are not cloned from or intended to imitate real people.
+`npm run ingest:recover` is dry-run first and reports wedged transcript candidates. Re-run with `--apply` only after reviewing the counts. `npm run daily:refresh-follow-ups` rebuilds stored daily "follow-up from yesterday" text from the nearest prior daily digest for each creator. `npm run weekly:refresh-research` refreshes the starter weekly archive with date-scoped research notes and richer "This Week in AI" sections. `npm run podcasts:generate` creates two-host weekly podcast audio for finalized grounded weekly digests, then uploads it to Supabase Storage.
 
 Protected endpoint:
 
@@ -152,9 +157,11 @@ curl -X POST http://localhost:3000/api/admin/run-ingest-now \
 Configured in `vercel.json`:
 
 - `/api/cron/process-ingest` every 5 minutes
-- `/api/cron/check-creators` daily
+- `/api/cron/check-creators` hourly
+- `/api/cron/generate-weekly-digest` weekly on Saturday
+- `/api/cron/generate-weekly-podcast` daily
 
-Both require `CRON_SECRET` via `Authorization: Bearer ...`, `x-cron-secret`, or `?secret=...`.
+All cron routes require `CRON_SECRET` via `Authorization: Bearer ...`, `x-cron-secret`, or `?secret=...`.
 
 ## Vercel Setup
 

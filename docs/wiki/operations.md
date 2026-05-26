@@ -2,11 +2,12 @@
 
 ## Cron and Ingestion Flow
 
-Production uses three Vercel Cron entries:
+Production uses four Vercel Cron entries:
 
 - `/api/cron/check-creators` runs hourly at minute 2. It discovers recent uploads for every linked creator, upserts the latest videos, and queues any video that does not already have a daily digest or an open ingest item.
-- `/api/cron/process-ingest` runs every five minutes. It fetches verified YouTube transcripts, generates the daily digest only after transcript validation passes, writes it idempotently by `video_id`, and then checks whether completed weekly digests are now available.
+- `/api/cron/process-ingest` runs every five minutes. It fetches verified YouTube transcripts, generates the daily digest only after transcript validation passes, and writes it idempotently by `video_id`. Weekly generation is isolated to the weekly cron so daily queue processing cannot spend its budget on weekly AI calls.
 - `/api/cron/generate-weekly-digest` runs on Saturday and explicitly refreshes completed Saturday-through-Friday weekly editions.
+- `/api/cron/generate-weekly-podcast` runs daily and retries one ready weekly podcast with missing or failed audio. This lets provider quota failures retry after the provider limit resets.
 
 This means a newly published YouTube video should be discovered within about one hour and processed on the next five-minute queue run. If the hourly discovery cron is missed, the next hourly run recovers because discovery also checks already-known videos that are missing daily digests.
 
@@ -52,14 +53,26 @@ If transcript extraction fails, the ingest item waits for the transcript retry w
 Transcript retry configuration:
 
 - `TRANSCRIPT_RETRY_MINUTES` controls how soon a missing transcript is retried. Default: `60`.
-- `TRANSCRIPT_MAX_RETRY_ATTEMPTS` controls how many transcript-missing attempts are allowed before the item becomes terminally failed. Default: `48`.
+- `TRANSCRIPT_MAX_RETRY_ATTEMPTS` controls how many hourly transcript-missing attempts run before the item switches to extended retries. Default: `48`.
+- `TRANSCRIPT_EXTENDED_RETRY_SECONDS` controls the slower retry cadence after that hourly budget is used. Default: `86400` (one day). Missing transcripts stay blocked and retryable instead of becoming terminally failed.
+- `TRANSCRIPT_FETCH_TIMEOUT_MS` bounds each free transcript fetch. Default: `45000`.
 - `MAX_VIDEOS_PROCESSED_PER_CRON_RUN` should stay at `1` for cron reliability; provider fallback can take long enough that multi-item HTTP runs risk hitting the route `maxDuration`.
 - `AI_PROVIDER_TIMEOUT_MS` controls provider request timeout for non-DeepSeek routes. Default: `300000`.
-- `DEEPSEEK_PROVIDER_TIMEOUT_MS` controls DeepSeek request timeout. Default: `600000` so V4 Pro can spend up to ten minutes on higher-quality daily, weekly, and podcast text output.
+- `DEEPSEEK_PROVIDER_TIMEOUT_MS` controls DeepSeek request timeout. Default: `600000` so V4 Pro can spend up to ten minutes on higher-quality daily, weekly, and podcast text output. Routes that run DeepSeek generation use longer `maxDuration` values than the provider timeout.
 - `DAILY_AI_MAX_OUTPUT_TOKENS` is optional. Leave it unset so the app does not impose an extra daily output cap beyond provider/model limits.
 - `WEEKLY_AI_MAX_OUTPUT_TOKENS` is optional. Leave it unset so the app does not impose an extra weekly output cap beyond provider/model limits.
 
 Stored transcript/digest metadata includes transcript length, transcript source hash, extraction metadata, extraction timestamp, generation model, generation timestamp, grounding status, source references, and processing status. The canonical processing states are `pending`, `transcript_missing`, `transcript_ready`, `digest_generated`, `podcast_generated`, and `failed`.
+
+To inspect and recover rows wedged by old transcript behavior:
+
+```bash
+npm run ingest:recover
+npm run ingest:recover -- --fetch
+npm run ingest:recover -- --apply
+```
+
+The command is dry-run first. It reports waiting items with completed transcript rows, terminal transcript failures with completed transcript rows, terminal transcript failures that are fetchable now, and non-grounded daily rows that should not suppress rediscovery.
 
 To safely regenerate a date after a grounding issue:
 
@@ -100,6 +113,8 @@ Configuration:
 
 `npm run podcasts:generate` is the preferred high-quality audio path because it uses Gemini Flash native multi-speaker TTS by default and stores an MP3 in Supabase. By default it selects up to four Sunday-ready weekly podcasts; use `--limit=N`, `--week=YYYY-MM-DD`, `--force`, or `--include-not-ready` when backfilling. Podcast metadata stores provider, model, cast/voice config, target minutes, word count, source references, audio QA, generation status, and failures internally. Listener-facing pages hide those operational details.
 
+Production also has `/api/cron/generate-weekly-podcast`, which retries ready weekly podcast audio one at a time (`PODCASTS_PER_CRON_RUN`, default `1`). The cron path uses Gemini Flash and uploads WAV audio directly so it does not depend on local `ffmpeg`; failed rows stay retryable and are picked up by the next daily run.
+
 NotebookLM currently has no stable app API for automated generation from this app. Treat NotebookLM as a manual external production option; the automated path here is the best feasible stack-native alternative.
 
 ## Weekly Calendar and Story Links
@@ -113,6 +128,7 @@ Weekly story cards link to `/app/daily?creatorId=...&date=...` using the story d
 ## Known Failure Modes
 
 - Missing or short transcripts produce `transcript_missing` and no final digest.
+- Transcript fetch errors are logged with `[ingest:transcript-fetch-failed]`, including video ID, reason, and retryability. Transcript-missing items keep retrying on an extended schedule after the hourly retry budget is used.
 - Provider JSON/schema failures prevent daily or weekly writes until a valid grounded payload is produced.
 - Weekly market context stays conservative unless date-scoped external research notes are supplied.
 - Podcast audio can fail because of missing TTS credentials, provider errors, Supabase Storage errors, or local `ffmpeg` failures. The UI shows the failure state instead of treating missing audio as final content.
