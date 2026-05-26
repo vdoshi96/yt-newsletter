@@ -13,6 +13,7 @@ export type RetryableItemState = {
 export type WaitingTranscriptState = {
   status: string;
   retryCount: number;
+  completedTranscriptAvailable?: boolean;
   nextRetryAt: Date | null;
   transcriptRetryAfter: Date | null;
   transcriptUpdatedAt: Date | null;
@@ -25,11 +26,10 @@ export function shouldRetryItem(
   maxAttempts: number,
   delaySeconds: number,
 ): boolean {
-  if (item.retryCount >= maxAttempts) {
-    return false;
-  }
-
   if (item.status === "failed") {
+    if (item.retryCount >= maxAttempts) {
+      return false;
+    }
     if (item.completedAt) {
       return false;
     }
@@ -40,6 +40,9 @@ export function shouldRetryItem(
   }
 
   if (item.status === "processing") {
+    if (item.retryCount >= maxAttempts) {
+      return false;
+    }
     if (item.startedAt === null) {
       return false;
     }
@@ -53,7 +56,7 @@ export function shouldRetryItem(
 export function shouldRetryWaitingTranscript(
   item: WaitingTranscriptState,
   now: Date,
-  maxAttempts: number,
+  _maxAttempts: number,
   delaySeconds: number,
 ) {
   if (item.status !== "waiting_for_transcript") {
@@ -62,8 +65,8 @@ export function shouldRetryWaitingTranscript(
   if (item.completedAt) {
     return false;
   }
-  if (item.retryCount >= maxAttempts) {
-    return false;
+  if (item.completedTranscriptAvailable) {
+    return true;
   }
 
   if (item.nextRetryAt) {

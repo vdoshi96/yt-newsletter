@@ -93,7 +93,7 @@ describe("shouldRetryItem", () => {
     expect(shouldRetryItem(item, NOW, MAX_ATTEMPTS, DELAY_SECONDS)).toBe(false);
   });
 
-  it("does not recover a stuck processing item that has exhausted its attempts", () => {
+  it("does not recover a stale processing item once it has reached the retry budget", () => {
     const item = makeItem({
       status: "processing",
       retryCount: 5,
@@ -110,6 +110,7 @@ function makeWaitingTranscript(
   return {
     status: "waiting_for_transcript",
     retryCount: 0,
+    completedTranscriptAvailable: false,
     nextRetryAt: null,
     transcriptRetryAfter: null,
     transcriptUpdatedAt: null,
@@ -139,13 +140,24 @@ describe("shouldRetryWaitingTranscript", () => {
     expect(shouldRetryWaitingTranscript(item, NOW, 48, DELAY_SECONDS)).toBe(false);
   });
 
-  it("stops retrying transcript waits after the transcript attempt budget is exhausted", () => {
+  it("retries immediately when a completed transcript exists despite a future retry time", () => {
+    const item = makeWaitingTranscript({
+      completedTranscriptAvailable: true,
+      nextRetryAt: new Date(NOW.getTime() + 30 * 60 * 1000),
+      transcriptRetryAfter: null,
+      transcriptUpdatedAt: null,
+    });
+
+    expect(shouldRetryWaitingTranscript(item, NOW, 48, DELAY_SECONDS)).toBe(true);
+  });
+
+  it("continues retrying transcript waits after the hourly attempt budget is exhausted", () => {
     const item = makeWaitingTranscript({
       retryCount: 48,
       transcriptRetryAfter: new Date(NOW.getTime() - 60 * 1000),
     });
 
-    expect(shouldRetryWaitingTranscript(item, NOW, 48, DELAY_SECONDS)).toBe(false);
+    expect(shouldRetryWaitingTranscript(item, NOW, 48, DELAY_SECONDS)).toBe(true);
   });
 
   it("does not retry a terminal completed transcript wait", () => {

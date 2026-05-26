@@ -32,21 +32,25 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 - Focused tests for parsing, auth, schemas, progress, and date/video selection
 - Hard transcript-grounding gate for daily digests and safe daily regeneration command
 - Hourly transcript retry recovery for daily uploads that were parked behind legacy 24-hour retry windows
+- Extended transcript retries after the hourly retry budget, so missing transcripts stay blocked/retryable instead of terminally failing
+- Daily podcast-audio cron retry path for ready weekly rows with missing or failed audio
 
 ## Verification
 
 Last known local checks:
 
-- `npm test`: passing, 400 tests
-- `npm run lint`: passing
-- `npx tsc --noEmit`: passing
-- `npm run build`: passing
+- `2026-05-26 npm test`: passing, 126 tests
+- `2026-05-26 npm run lint`: passing
+- `2026-05-26 npx tsc --noEmit`: passing
+- `2026-05-26 npm run build`: passing
+- `2026-05-26 browser QA`: local authenticated dashboard, recovered grounded daily digest, jobs, weekly archive, and podcasts rendered without console errors after restarting against restored `.env.local`
 
 ## Deployment Notes
 
 - Local `DATABASE_URL` and `DIRECT_URL` authenticate after rebuilding their embedded password from `DATABASE_PASSWORD`.
 - If production still shows a Postgres auth error, refresh Vercel's `DATABASE_URL` with the same URL-encoded password value used locally, then redeploy.
+- `2026-05-26`: Vercel production env was refreshed for `CRON_SECRET`, one-video cron processing, transcript retry/timeout knobs, DeepSeek provider timeout, and podcast retry limit.
 
 ## Open Blockers
 
-- **2026-05-13 — Scheduled cron ingestion bug (partially fixed).** The immediate crash — duplicate-key error on `transcripts_video_source_unique` — is fixed in `src/lib/processor.ts` (both transcript INSERTs now use `ON CONFLICT … DO UPDATE`). Any `ingest_job_items` stuck in `failed` due to this error should be reset to `queued` with the SQL in the investigation doc. H4 (no recovery path for stuck/failed items) is now fixed: a retry/backoff mechanism with `retry_count` + `next_retry_at` columns lets the dequeue re-pick `failed` items (including grounding rejections) and auto-unstick `processing` items older than 1 h, up to 5 attempts. Knobs: `INGEST_ITEM_MAX_RETRIES`, `INGEST_ITEM_RETRY_DELAY_SECONDS`. H1–H3 (Vercel plan schedule caps, `CRON_SECRET`, function timeout / no `maxDuration`) remain open; validate via the Vercel dashboard before closing. See [Cron Ingestion Investigation: 2026-05-13](../wiki/cron-ingestion-investigation-2026-05-13.md).
+- **2026-05-26 — Daily ingestion reliability follow-up.** The active fix set keeps transcript waits retryable on an extended cadence after the hourly retry budget, bounds transcript fetches with `TRANSCRIPT_FETCH_TIMEOUT_MS`, reconciles waiting rows when a completed `youtube_transcript_free` transcript exists, prevents exhausted stale `processing` rows from reclaiming forever, and adds `npm run ingest:recover` as the dry-run-first recovery path for rows wedged by old transcript behavior. Daily discovery/processing no longer runs weekly generation inline; weekly and podcast work stay behind dedicated cron routes.

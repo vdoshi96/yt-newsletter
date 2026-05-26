@@ -1,5 +1,9 @@
 # Log
 
+## 2026-05-26 Daily Ingestion Reliability Follow-Up
+
+Implemented the consensus reliability path from the model review notes: transcript waits can recover immediately when a completed `youtube_transcript_free` row exists, hourly transcript retries shift to an extended cadence instead of producing final content, transcript fetches have a configurable timeout, stale `processing` rows are bounded by the retry budget, and queue scans log candidate counts by status. Added `npm run ingest:recover` as a dry-run-first command for wedged transcript rows and moved weekly generation fully behind the dedicated weekly cron so daily discovery/processing budgets stay focused on daily availability.
+
 ## 2026-05-16 Editorial Quality + DeepSeek V4 Pro Pass
 
 Resolved stale Claude worktrees/branches after preserving patch evidence outside the repo. Verified the official DeepSeek V4 Pro docs and switched the app's high-quality generation route from compatibility aliases to `deepseek-v4-pro` with thinking enabled, longer DeepSeek timeout, no default app-level daily/weekly output cap, explicit retry-before-fallback behavior, response-body error logging, and model/attempt logs. Daily digest rendering now removes the redundant CS-background panel, breaks long sections into paragraphs, hides timestamp-heavy transcript excerpt lists, and keeps transcript grounding to status, transcript source, and model used. Weekly digest rendering now hides weekly post cards/source notes, jumps to the latest published completed week, and has an explicit Saturday cron route. Podcast pages hide operational stats, and scripts use human host names (Maya/Theo and Nina/Jonah) with DeepSeek provider-authored scripts as the default path. Dashboard daily count now reflects recent grounded long-form digests rather than all historical rows.

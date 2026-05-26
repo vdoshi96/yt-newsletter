@@ -27,6 +27,38 @@ describe("dashboard counts and weekly scheduling", () => {
     expect(route).toContain("maxDuration");
   });
 
+  it("has a scheduled podcast audio cron route that retries missing or failed audio", () => {
+    const vercel = readRepoFile("vercel.json");
+    const route = readRepoFile("src/app/api/cron/generate-weekly-podcast/route.ts");
+    const generator = readRepoFile("src/lib/podcasts/generate-audio.ts");
+
+    expect(vercel).toContain("/api/cron/generate-weekly-podcast");
+    expect(route).toContain("generateDueWeeklyPodcasts");
+    expect(route).toContain("maxDuration");
+    expect(generator).toContain("podcast_status === \"failed\"");
+    expect(generator).toContain("contentType: \"audio/wav\"");
+  });
+
+  it("keeps weekly generation out of daily discovery and process cron paths", () => {
+    const processor = readRepoFile("src/lib/processor.ts");
+    const processRoute = readRepoFile("src/app/api/cron/process-ingest/route.ts");
+    const discoveryRoute = readRepoFile("src/app/api/cron/check-creators/route.ts");
+
+    expect(processRoute).not.toContain("ensureCompletedWeeklyDigestsForCreator");
+    expect(discoveryRoute).not.toContain("ensureCompletedWeeklyDigestsForCreator");
+    expect(processor).not.toContain("weekly-availability-checked");
+  });
+
+  it("keeps daily process route budget above DeepSeek generation timeout", () => {
+    const processRoute = readRepoFile("src/app/api/cron/process-ingest/route.ts");
+    const adminRoute = readRepoFile("src/app/api/admin/run-ingest-now/route.ts");
+    const config = readRepoFile("src/lib/config.ts");
+
+    expect(processRoute).toContain("maxDuration = 800");
+    expect(adminRoute).toContain("maxDuration = 800");
+    expect(config).toContain('DEEPSEEK_PROVIDER_TIMEOUT_MS: "600000"');
+  });
+
   it("offers the latest published weekly edition instead of the current in-progress week", () => {
     const weeklyPage = readRepoFile("src/app/app/weekly/page.tsx");
 

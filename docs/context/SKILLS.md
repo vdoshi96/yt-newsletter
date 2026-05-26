@@ -23,8 +23,9 @@ Queue ingestion from `/app/creators`, then process with `/app/settings` or `npm 
 Production discovery and processing are split:
 
 - `/api/cron/check-creators` runs hourly and queues missing daily work for newly discovered or previously missed videos.
-- `/api/cron/process-ingest` runs every five minutes and processes queued videos.
+- `/api/cron/process-ingest` runs every five minutes and processes queued videos. It does not generate weekly digests inline.
 - `/api/cron/generate-weekly-digest` runs on Saturday and publishes completed Saturday-through-Friday weekly digests.
+- `/api/cron/generate-weekly-podcast` runs daily and retries one ready weekly podcast whose audio is missing or failed.
 - `/app/settings` -> `Refresh and run now` runs discovery plus processing for admin/local verification.
 - `POST /api/admin/run-ingest-now` with `CRON_SECRET` also runs discovery plus processing by default; pass `?discover=0` to process only.
 
@@ -32,11 +33,17 @@ Run `npm run daily:refresh-follow-ups` to rebuild stored daily follow-up text fr
 
 Run `npm run daily:regenerate -- --date=YYYY-MM-DD` to safely regenerate stored daily digests after verifying/fetching transcript text. This command fails closed if transcript grounding checks do not pass.
 
+Missing transcripts stay retryable: the hourly retry budget is controlled by `TRANSCRIPT_MAX_RETRY_ATTEMPTS`, then retries continue on the slower `TRANSCRIPT_EXTENDED_RETRY_SECONDS` cadence instead of permanently failing the item. Transcript fetches are bounded by `TRANSCRIPT_FETCH_TIMEOUT_MS` so a hung YouTube transcript request cannot consume the whole Vercel route budget.
+
+Run `npm run ingest:recover` to inspect wedged transcript rows. It defaults to a dry run and reports `waitingWithCompletedTranscript`, `terminalFailedWithCompletedTranscript`, `terminalFailedFetchableTranscript`, and `nonGroundedDailyRows`. Add `--fetch` to test terminal failed rows with a live transcript fetch during dry run, and add `--apply` only after reviewing the targeted reset set.
+
 Run `npm run backfill:grounded -- --force` to re-discover configured creator back catalogs, queue transcript-grounded reprocessing, regenerate daily digests from verified transcript text, and refresh affected weekly digests. Add `--since=YYYY-MM-DD --until=YYYY-MM-DD` for a bounded production run, and use `--dry-run` before a large run.
 
 Run `npm run weekly:refresh-research` to refresh the starter weekly archive with the curated date-scoped research notes used for the baseline "This Week in AI" editions.
 
 Run `npm run podcasts:generate` to generate up to four Sunday-ready weekly podcast MP3s with the rotating two-host Gemini Flash path. Provider-authored scripts default to DeepSeek V4 Pro; Maya/Theo and Nina/Jonah are the user-facing host casts. Use `--force`, `--limit=N`, or `--week=YYYY-MM-DD` for backfills.
+
+Production podcast audio retries through `/api/cron/generate-weekly-podcast` and `PODCASTS_PER_CRON_RUN` (default `1`). This path stores WAV audio and does not rely on local `ffmpeg`.
 
 ## Verification
 

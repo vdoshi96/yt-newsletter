@@ -43,3 +43,7 @@ Daily digests, weekly digests, and provider-generated podcast scripts use `deeps
 ## 2026-05-16: Weekly Publication Navigation
 
 Weekly digest generation has an explicit Saturday cron route at `/api/cron/generate-weekly-digest`. The weekly page jumps to the latest stored published Saturday-through-Friday edition rather than the current in-progress week, so the Saturday publication for the prior completed week remains visible.
+
+## 2026-05-26: Transcript Recovery and Daily Cron Isolation
+
+Daily discovery and queue-processing cron routes must not generate weekly digests inline. Transcript fetches are bounded by `TRANSCRIPT_FETCH_TIMEOUT_MS`, transcript-missing rows move from hourly retries to extended retries instead of becoming final content, stale processing rows are reclaimed only within the retry budget, and `npm run ingest:recover` is the dry-run-first path for rows wedged by earlier transcript retry behavior.
