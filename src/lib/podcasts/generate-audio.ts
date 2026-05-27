@@ -1,4 +1,5 @@
 import { generatePodcastScriptPayload } from "@/lib/ai";
+import { getCatalogFirstWeeklyStart } from "@/lib/catalog";
 import { normalizeConcurrency, runBoundedConcurrency } from "@/lib/concurrency";
 import { numberEnv } from "@/lib/config";
 import { getSql } from "@/lib/db";
@@ -112,6 +113,7 @@ async function getWeeklyDigests(input: {
 }) {
   const sql = getSql();
   const limit = input.limit ?? numberEnv("PODCASTS_PER_CRON_RUN", 1);
+  const firstWeeklyStart = getCatalogFirstWeeklyStart();
   const rows = await sql<WeeklyDigestRow[]>`
     select
       id,
@@ -125,6 +127,7 @@ async function getWeeklyDigests(input: {
       podcast_status
     from weekly_digests
     where (${input.week ?? null}::date is null or week_start = ${input.week ?? null}::date)
+      and week_start >= ${firstWeeklyStart}::date
       and grounding_status = 'grounded'
       and processing_status = 'digest_generated'
       and coalesce(source_digest_count, 0) > 0

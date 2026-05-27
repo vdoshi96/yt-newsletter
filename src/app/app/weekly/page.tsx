@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarDays, RotateCcw } from "lucide-react";
 import { requireUser } from "@/lib/auth/current-user";
+import { getCatalogFirstWeeklyStart } from "@/lib/catalog";
 import { getCreatorsForUser } from "@/lib/creators";
 import { getSql } from "@/lib/db";
 import { weeklyDigestSchema, type WeeklyDigestPayload } from "@/lib/digests/schemas";
@@ -52,8 +53,8 @@ export default async function WeeklyPage({
           Weekly digest archive
         </h2>
         <p className="mt-4 max-w-3xl text-slate-600">
-          The starter archive begins with four completed backfilled weeks. New
-          Saturday-through-Friday editions are stored here after the Friday close.
+          The archive starts with the March 2026 catalog and stores completed
+          Saturday-through-Friday editions after the Friday close.
         </p>
       </section>
 
@@ -358,6 +359,7 @@ function parseWeeklyDigestRow(digest: WeeklyRow): WeeklyDigestPayload {
 
 async function getWeeklyDigests(userId: string, creatorId: string) {
   const sql = getSql();
+  const firstWeeklyStart = getCatalogFirstWeeklyStart();
   return sql<WeeklyRow[]>`
     select
       weekly_digests.id,
@@ -376,6 +378,7 @@ async function getWeeklyDigests(userId: string, creatorId: string) {
     join user_creators on user_creators.creator_id = weekly_digests.creator_id
     where user_creators.user_id = ${userId}
       and weekly_digests.creator_id = ${creatorId}
+      and weekly_digests.week_start >= ${firstWeeklyStart}::date
     order by weekly_digests.week_start desc
   `;
 }

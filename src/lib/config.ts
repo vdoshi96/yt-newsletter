@@ -19,6 +19,7 @@ export const defaultEnvValues = {
   NEXT_PUBLIC_APP_URL: "http://localhost:3000",
   SUPABASE_STORAGE_BUCKET: "yt-newsletter-assets",
   ALLOW_PUBLIC_SIGNUP: "false",
+  CATALOG_START_DATE: "2026-03-01",
   TRANSCRIPT_RETRY_MINUTES: "60",
   TRANSCRIPT_MAX_RETRY_ATTEMPTS: "48",
   TRANSCRIPT_EXTENDED_RETRY_SECONDS: "86400",
@@ -44,7 +45,8 @@ export const defaultEnvValues = {
   DEEPSEEK_DAILY_MAX_ATTEMPTS: "2",
   QWEN_DAILY_FALLBACK_MODEL: "qwen3-max",
   DEEPSEEK_WEEKLY_MODEL: "deepseek-v4-pro",
-  DEEPSEEK_WEEKLY_MAX_ATTEMPTS: "3",
+  DEEPSEEK_WEEKLY_MAX_ATTEMPTS: "5",
+  ALLOW_WEEKLY_DIGEST_FALLBACK: "false",
   KIMI_WEEKLY_MODEL: "moonshot-v1-32k",
   GEMINI_VIDEO_MODEL: "gemini-2.5-flash",
   GEMINI_TTS_MODEL: "gemini-2.5-flash-preview-tts",
@@ -63,7 +65,7 @@ export const defaultEnvValues = {
   PODCAST_GENERATION_MODE: "provider_script",
   PODCAST_TTS_PROVIDER: "gemini_flash",
   PODCAST_TTS_TIMEOUT_MS: "300000",
-  PODCASTS_PER_CRON_RUN: "2",
+  PODCASTS_PER_CRON_RUN: "1",
   PODCAST_AUDIO_BITRATE: "128k",
 } as const;
 

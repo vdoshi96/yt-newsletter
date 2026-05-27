@@ -1,4 +1,5 @@
 import { generatePodcastScriptPayload, generateWeeklyDigestPayload } from "@/lib/ai";
+import { getCatalogStartDate } from "@/lib/catalog";
 import { booleanEnv, numberEnv } from "@/lib/config";
 import { normalizeConcurrency, runBoundedConcurrency } from "@/lib/concurrency";
 import { getSql } from "@/lib/db";
@@ -44,12 +45,14 @@ export async function ensureCompletedWeeklyDigestsForCreator(input: {
 }) {
   const sql = getSql();
   const minTranscriptCharacters = minimumTranscriptCharacters();
+  const catalogStartDate = getCatalogStartDate();
   const rows = await sql<Array<{ digest_date: string }>>`
     select distinct digest_date::text as digest_date
     from daily_digests
     join videos on videos.id = daily_digests.video_id
     where daily_digests.creator_id = ${input.creatorId}
       and daily_digests.grounding_status = 'grounded'
+      and daily_digests.digest_date >= ${catalogStartDate}::date
       and daily_digests.transcript_source = 'youtube_transcript_free'
       and coalesce(daily_digests.transcript_length, 0) >= ${minTranscriptCharacters}
       and coalesce(videos.duration_seconds, 0) >= 300
@@ -99,6 +102,7 @@ export async function ensureWeeklyDigestForRange(input: {
   const sql = getSql();
   const { weekStart, weekEnd } = input.range;
   const minTranscriptCharacters = minimumTranscriptCharacters();
+  const catalogStartDate = getCatalogStartDate();
   const existing = await sql<{ id: string }[]>`
     select id
     from weekly_digests
@@ -124,6 +128,7 @@ export async function ensureWeeklyDigestForRange(input: {
     join videos on videos.id = daily_digests.video_id
     where daily_digests.creator_id = ${input.creatorId}
       and daily_digests.digest_date between ${weekStart} and ${weekEnd}
+      and daily_digests.digest_date >= ${catalogStartDate}::date
       and daily_digests.grounding_status = 'grounded'
       and daily_digests.transcript_source = 'youtube_transcript_free'
       and coalesce(daily_digests.transcript_length, 0) >= ${minTranscriptCharacters}

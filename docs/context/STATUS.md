@@ -14,8 +14,8 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 - Queue processor endpoints and manual runner
 - Daily digest UI
 - Weekly digest and podcast pages
-- Baseline flow for Nate B. Jones that starts with four completed weekly editions
-- Weekly digest archive behavior for completed Saturday-to-Friday weeks
+- Baseline flow for Nate B. Jones plus a durable March 1, 2026 catalog boundary
+- Weekly digest archive behavior for completed Saturday-to-Friday weeks from the catalog start
 - Baseline video filtering that excludes Shorts-style and very short clips from the live starter data
 - Daily and weekly digest explanation levels: beginner, practitioner, and advanced
 - Hourly creator discovery plus five-minute queue processing for fresher daily digests
@@ -23,7 +23,7 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 - 2026-05-01 through 2026-05-16 main long-form daily digests regenerated and audited from verified transcripts
 - DeepSeek V4 Pro primary route for high-quality daily, weekly, and provider-authored podcast scripts
 - Completed May-covering weekly digests regenerated with DeepSeek and source references
-- Completed May-covering weekly podcasts generated as QA-passed Gemini MP3 assets
+- Completed May-covering weekly podcasts generated as QA-passed Gemini assets
 - Approximately 30-minute two-host weekly podcast scripts with configurable target length and TTS settings
 - Two-host weekly podcast MP3 generation with Gemini Flash rotating Maya/Theo and Nina/Jonah host casts; existing stored MP3s may include earlier Qwen-generated assets
 - Grounded back-catalog regeneration command with force/dry-run controls and idempotent daily/weekly/podcast metadata
@@ -33,7 +33,7 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 - Hard transcript-grounding gate for daily digests and safe daily regeneration command
 - Hourly transcript retry recovery for daily uploads that were parked behind legacy 24-hour retry windows
 - Extended transcript retries after the hourly retry budget, so missing transcripts stay blocked/retryable instead of terminally failing
-- Daily podcast-audio cron retry path for ready weekly rows with missing or failed audio
+- Daily podcast-audio cron retry path for ready catalog weekly rows with missing or failed audio
 - Bounded batch worker pools for daily ingest processing, weekly digest synthesis, and podcast generation, controlled by `INGEST_PROCESS_CONCURRENCY`, `WEEKLY_DIGEST_CONCURRENCY`, and `PODCAST_GENERATION_CONCURRENCY`
 
 ## Verification

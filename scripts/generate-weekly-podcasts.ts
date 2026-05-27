@@ -5,6 +5,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { closeSql, getSql } from "@/lib/db";
+import { getCatalogFirstWeeklyStart } from "@/lib/catalog";
 import { weeklyDigestSchema } from "@/lib/digests/schemas";
 import { normalizeConcurrency, runBoundedConcurrency } from "@/lib/concurrency";
 import {
@@ -129,6 +130,7 @@ async function getWeeklyDigests() {
   const includeNotReady = args.has("include-not-ready");
   const week = args.get("week");
   const limit = numericArg("limit", 4);
+  const firstWeeklyStart = getCatalogFirstWeeklyStart();
   const rows = await sql<WeeklyDigestRow[]>`
     select
       id,
@@ -142,6 +144,7 @@ async function getWeeklyDigests() {
       podcast_status
     from weekly_digests
     where (${week ?? null}::date is null or week_start = ${week ?? null}::date)
+      and week_start >= ${firstWeeklyStart}::date
       and grounding_status = 'grounded'
       and processing_status = 'digest_generated'
       and coalesce(source_digest_count, 0) > 0

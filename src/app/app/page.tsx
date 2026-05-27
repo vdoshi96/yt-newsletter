@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ExplanationLevelPanel } from "@/components/explanation-level-panel";
+import { getCatalogFirstWeeklyStart, getCatalogStartDate } from "@/lib/catalog";
 import { getSql } from "@/lib/db";
 import { dailyDigestSchema } from "@/lib/digests/schemas";
 import { requireUser } from "@/lib/auth/current-user";
@@ -47,8 +48,8 @@ export default async function AppHome() {
               A calmer way to keep up with fast YouTube creators.
             </h2>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
-              Paste a creator URL, backfill a month or more of videos, and read archived
-              weekly editions that separate source-backed claims from uncertainty.
+              Paste a creator URL, keep the March 2026 catalog current, and read archived
+              daily, weekly, and podcast editions that separate source-backed claims from uncertainty.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link className="btn-primary" href="/app/creators">
@@ -120,9 +121,8 @@ export default async function AppHome() {
           <h3 className="section-kicker">Starter creator</h3>
           <p className="mt-2 text-2xl font-black text-slate-950">Nate B. Jones</p>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Seeded as the first creator. The baseline run queues the four most recent
-            completed Saturday-through-Friday weeks, starts with four weekly editions,
-            and keeps future weeks as an archive.
+            Seeded as the first creator. The live archive starts at March 1, 2026 and
+            keeps each completed Saturday-through-Friday week current.
           </p>
           <Link className="mt-5 inline-flex btn-secondary" href="/app/creators">
             Start a backfill
@@ -348,6 +348,8 @@ function RecentActivity({ activity }: { activity: ActivityRow[] }) {
 
 async function getDashboardStats(userId: string) {
   const sql = getSql();
+  const catalogStartDate = getCatalogStartDate();
+  const firstWeeklyStart = getCatalogFirstWeeklyStart();
   const rows = await sql<Array<{ creator_count: number; daily_count: number; weekly_count: number }>>`
     select
       (select count(*)::int from user_creators where user_id = ${userId}) as creator_count,
@@ -358,6 +360,7 @@ async function getDashboardStats(userId: string) {
         join user_creators on user_creators.creator_id = daily_digests.creator_id
         where user_creators.user_id = ${userId}
           and daily_digests.grounding_status = 'grounded'
+          and daily_digests.digest_date >= ${catalogStartDate}::date
           and daily_digests.digest_date >= current_date - make_interval(days => 30)
           and coalesce(videos.duration_seconds, 0) >= ${MAIN_VIDEO_MIN_SECONDS}
           and lower(coalesce(videos.title, '')) not like '%#shorts%'
@@ -369,6 +372,7 @@ async function getDashboardStats(userId: string) {
         join user_creators on user_creators.creator_id = weekly_digests.creator_id
         where user_creators.user_id = ${userId}
           and weekly_digests.grounding_status = 'grounded'
+          and weekly_digests.week_start >= ${firstWeeklyStart}::date
       ) as weekly_count
   `;
   return {
@@ -402,6 +406,7 @@ type DailyPreviewRow = {
 
 async function getRecentActivity(userId: string) {
   const sql = getSql();
+  const catalogStartDate = getCatalogStartDate();
   return sql<ActivityRow[]>`
     (
       select
@@ -427,6 +432,7 @@ async function getRecentActivity(userId: string) {
       join videos on videos.id = daily_digests.video_id
       join user_creators on user_creators.creator_id = daily_digests.creator_id
       where user_creators.user_id = ${userId}
+        and daily_digests.digest_date >= ${catalogStartDate}::date
         and coalesce(videos.duration_seconds, 0) >= ${MAIN_VIDEO_MIN_SECONDS}
         and lower(coalesce(videos.title, '')) not like '%#shorts%'
         and lower(coalesce(videos.title, '')) not like '% #short %'
@@ -438,6 +444,7 @@ async function getRecentActivity(userId: string) {
 
 async function getLatestDailyPreview(userId: string) {
   const sql = getSql();
+  const catalogStartDate = getCatalogStartDate();
   const rows = await sql<DailyPreviewRow[]>`
     select
       daily_digests.creator_id,
@@ -457,6 +464,7 @@ async function getLatestDailyPreview(userId: string) {
     join user_creators on user_creators.creator_id = daily_digests.creator_id
     where user_creators.user_id = ${userId}
       and daily_digests.grounding_status = 'grounded'
+      and daily_digests.digest_date >= ${catalogStartDate}::date
       and daily_digests.transcript_source = 'youtube_transcript_free'
       and coalesce(videos.duration_seconds, 0) >= ${MAIN_VIDEO_MIN_SECONDS}
       and lower(coalesce(videos.title, '')) not like '%#shorts%'

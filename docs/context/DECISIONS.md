@@ -18,7 +18,7 @@ Free YouTube transcripts are stored as `youtube_transcript_free`. Daily digests 
 
 ## 2026-05-09: Weekly Digest Archive
 
-The first Nate B. Jones baseline starts with four weekly editions because it covers the four most recent completed Saturday-to-Friday windows. Weekly digests are not capped at four; every completed Saturday-to-Friday week with daily digests can be stored and shown in the archive. Future weekly editions appear Saturday morning after the Friday close, while larger backfills can create older archived weeks.
+The live Nate B. Jones catalog starts on March 1, 2026 (`CATALOG_START_DATE`). Daily views, weekly generation, weekly archive selection, and podcast generation should ignore older seeded or experimental rows. Weekly digests are not capped; every completed Saturday-to-Friday week with catalog daily digests can be stored and shown in the archive. Future weekly editions appear Saturday morning after the Friday close.
 
 ## 2026-05-09: Freshness-Oriented Cron Split
 
@@ -26,7 +26,7 @@ Creator discovery runs hourly and queue processing runs every five minutes. Disc
 
 ## 2026-05-09: Podcast Quality Path
 
-The automated high-quality podcast path is `npm run podcasts:generate`, using an approximately 30-minute two-host script and Gemini Flash native multi-speaker TTS by default. Host casts rotate weekly between Maya/Theo and Nina/Jonah while preserving the Gemini voice IDs underneath. The older Qwen voice-designed segmented path remains available as an explicit provider. Podcast generation selects Sunday-ready weeks by default, stores provider/model/voice metadata, and marks audio failures without presenting placeholders as final audio. NotebookLM is documented as manual because it does not expose a stable app API for this workflow.
+The automated high-quality podcast path is `npm run podcasts:generate`, using an approximately 30-minute two-host script and Gemini Flash native multi-speaker TTS by default. Host casts rotate weekly between Maya/Theo and Nina/Jonah while preserving the Gemini voice IDs underneath. The older Qwen voice-designed segmented path remains available as an explicit provider. Podcast generation selects ready catalog weeks by default, stores provider/model/voice metadata, and marks audio failures without presenting placeholders as final audio. NotebookLM is documented as manual because it does not expose a stable app API for this workflow.
 
 ## 2026-05-09: Weekly Calendar Navigation
 
@@ -39,6 +39,8 @@ Back-catalog regeneration is driven by `npm run backfill:grounded`. The command 
 ## 2026-05-16: DeepSeek V4 Pro Editorial Path
 
 Daily digests, weekly digests, and provider-generated podcast scripts use `deepseek-v4-pro` as the primary high-quality route. The DeepSeek request path explicitly enables thinking mode, omits temperature for thinking requests, allows a longer DeepSeek timeout, does not impose an app-level daily/weekly output cap unless explicitly configured, retries the primary route before fallback, and logs provider/model/attempt metadata. Dashboard daily counts are scoped to grounded long-form digests from the latest 30 days instead of historical rows.
+
+Weekly catalog generation fails closed by default if the provider route is exhausted (`ALLOW_WEEKLY_DIGEST_FALLBACK=false`) and gives DeepSeek five attempts before fallback providers. This prevents deterministic `local:fallback` weekly rows from silently satisfying backlog recovery or podcast generation.
 
 ## 2026-05-16: Weekly Publication Navigation
 
