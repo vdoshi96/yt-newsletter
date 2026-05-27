@@ -1,5 +1,6 @@
 import "./load-env";
 import { closeSql, getSql } from "@/lib/db";
+import { normalizeConcurrency, runBoundedConcurrency } from "@/lib/concurrency";
 import { minimumTranscriptCharacters } from "@/lib/digests/grounding";
 import {
   filterBackfillVideosByDate,
@@ -360,16 +361,19 @@ function getWeeklyRangesForDateWindow(window: BackfillDateWindow) {
 }
 
 async function refreshWeeklyRangesForCreator(creatorId: string, ranges: WeeklyRange[]) {
-  const refreshed: string[] = [];
-  for (const range of ranges) {
+  const concurrency = Math.min(
+    normalizeConcurrency(numberEnv("WEEKLY_DIGEST_CONCURRENCY", 2)),
+    Math.max(1, ranges.length),
+  );
+  const refreshed = await runBoundedConcurrency(ranges, concurrency, async (range) => {
     const id = await ensureWeeklyDigestForRange({
       creatorId,
       range,
       forceRegenerate: true,
     });
-    if (id) refreshed.push(id);
-  }
-  return refreshed;
+    return id;
+  });
+  return refreshed.filter((id): id is string => Boolean(id));
 }
 
 function toDateString(date: Date) {

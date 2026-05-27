@@ -21,6 +21,27 @@ describe("ingestion idempotency SQL safeguards", () => {
     expect(processor).toMatch(/update ingest_job_items[\s\S]+returning/i);
   });
 
+  it("prioritizes due transcript retries before stale queued backlog", () => {
+    const processor = readFileSync(join(process.cwd(), "src/lib/processor.ts"), "utf8");
+
+    expect(processor).toMatch(/when ingest_job_items\.status = 'waiting_for_transcript'[\s\S]+transcripts\.status = 'completed'[\s\S]+then 0/i);
+    expect(processor).toMatch(/when ingest_job_items\.status = 'waiting_for_transcript'[\s\S]+next_retry_at <= now\(\)[\s\S]+then 0/i);
+    expect(processor).toMatch(/when ingest_job_items\.status = 'queued' then 2/i);
+    expect(processor).toMatch(/status in \('waiting_for_transcript', 'queued'\)[\s\S]+videos\.published_at[\s\S]+desc nulls last/i);
+  });
+
+  it("prevents more than one open ingest item per video", () => {
+    const migration = readFileSync(
+      join(process.cwd(), "supabase/migrations/001_initial_schema.sql"),
+      "utf8",
+    );
+    const creator = readFileSync(join(process.cwd(), "src/lib/creators.ts"), "utf8");
+
+    expect(migration).toContain("ingest_job_items_one_open_item_per_video_idx");
+    expect(migration).toMatch(/create unique index[\s\S]+on ingest_job_items \(video_id\)[\s\S]+where completed_at is null[\s\S]+status in/i);
+    expect(creator).toMatch(/on conflict \(video_id\) where completed_at is null[\s\S]+do nothing/i);
+  });
+
   it("does not reuse ungrounded existing daily digests during backfill", () => {
     const processor = readFileSync(join(process.cwd(), "src/lib/processor.ts"), "utf8");
 
@@ -52,6 +73,27 @@ describe("ingestion idempotency SQL safeguards", () => {
     expect(script).toContain("waitingWithCompletedTranscript");
     expect(script).toContain("terminalFailedFetchableTranscript");
     expect(script).toContain("nonGroundedDailyRows");
+  });
+
+  it("reports and collapses duplicate open ingest rows during recovery", () => {
+    const script = readFileSync(join(process.cwd(), "scripts/recover-ingest-transcripts.ts"), "utf8");
+
+    expect(script).toContain("duplicateOpenIngestRows");
+    expect(script).toContain("collapseDuplicateOpenIngestRows");
+    expect(script).toContain("duplicate_open_ingest_collapsed");
+  });
+
+  it("uses bounded concurrency for batch daily, weekly, and podcast generation", () => {
+    const processor = readFileSync(join(process.cwd(), "src/lib/processor.ts"), "utf8");
+    const weekly = readFileSync(join(process.cwd(), "src/lib/weekly/generate.ts"), "utf8");
+    const podcasts = readFileSync(join(process.cwd(), "src/lib/podcasts/generate-audio.ts"), "utf8");
+
+    expect(processor).toContain("INGEST_PROCESS_CONCURRENCY");
+    expect(processor).toContain("runBoundedConcurrency(items");
+    expect(weekly).toContain("WEEKLY_DIGEST_CONCURRENCY");
+    expect(weekly).toContain("runBoundedConcurrency(ranges");
+    expect(podcasts).toContain("PODCAST_GENERATION_CONCURRENCY");
+    expect(podcasts).toContain("runBoundedConcurrency(rows");
   });
 
   it("marks non-grounded daily placeholders failed when digest generation fails", () => {

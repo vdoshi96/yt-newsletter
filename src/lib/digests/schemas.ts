@@ -131,14 +131,14 @@ const podcastGenerationSchema = z.object({
 
 const sourceReferenceSchema = z.record(z.string(), z.unknown());
 
-const explanationLevelsSchema = z.object(
-  Object.fromEntries(EXPLANATION_LEVEL_KEYS.map((level) => [level, z.string().min(1)])) as Record<
+const partialExplanationLevelsSchema = z.object(
+  Object.fromEntries(
+    EXPLANATION_LEVEL_KEYS.map((level) => [level, z.string().min(1).optional()]),
+  ) as Record<
     (typeof EXPLANATION_LEVEL_KEYS)[number],
-    z.ZodString
+    z.ZodOptional<z.ZodString>
   >,
 );
-
-const fullLevelVersionsSchema = explanationLevelsSchema;
 
 const defaultedString = (fallback: string) =>
   z.preprocess((value) => (value === null || value === undefined ? fallback : value), z.string());
@@ -164,8 +164,8 @@ export const dailyDigestSchema = z
     front_page_summary: z.string().min(1),
     what_creator_said: z.array(z.string()).default([]),
     plain_english_explanation: z.string().min(1),
-    explanation_levels: explanationLevelsSchema.optional(),
-    full_level_versions: fullLevelVersionsSchema.optional(),
+    explanation_levels: partialExplanationLevelsSchema.optional(),
+    full_level_versions: partialExplanationLevelsSchema.optional(),
     why_it_matters: z.string().min(1),
     what_to_do_next: z.array(z.string()).default([]),
     free_learning_plan: z.array(z.string()).default([]),
@@ -214,7 +214,7 @@ export const weeklyDigestSchema = z
   .object({
     title: z.string().min(1),
     newsletter_markdown: z.string().min(1),
-    explanation_levels: explanationLevelsSchema.optional(),
+    explanation_levels: partialExplanationLevelsSchema.optional(),
     executive_insights_memo: z.string().default("No executive memo is available yet."),
     board_level_implications: modelStringArray,
     market_investment_lens: z.string().default("No market or investment lens is available yet."),

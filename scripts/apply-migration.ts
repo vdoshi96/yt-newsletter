@@ -1,12 +1,19 @@
 import "./load-env";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { closeSql, getSql } from "@/lib/db";
 
 async function main() {
   const sql = getSql();
-  const migration = await readFile("supabase/migrations/001_initial_schema.sql", "utf8");
-  await sql.unsafe(migration);
-  console.log("Applied supabase/migrations/001_initial_schema.sql");
+  const migrationFiles = (await readdir("supabase/migrations"))
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+
+  for (const file of migrationFiles) {
+    const path = `supabase/migrations/${file}`;
+    const migration = await readFile(path, "utf8");
+    await sql.unsafe(migration);
+    console.log(`Applied ${path}`);
+  }
 }
 
 main()

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  getQueueCandidatePriority,
   shouldRetryWaitingTranscript,
   shouldRetryItem,
+  type QueueCandidateState,
   type RetryableItemState,
   type WaitingTranscriptState,
 } from "../src/lib/ingest/retry";
@@ -167,5 +169,62 @@ describe("shouldRetryWaitingTranscript", () => {
     });
 
     expect(shouldRetryWaitingTranscript(item, NOW, 48, DELAY_SECONDS)).toBe(false);
+  });
+});
+
+function makeQueueCandidate(
+  overrides: Partial<QueueCandidateState>,
+): QueueCandidateState {
+  return {
+    status: "queued",
+    completedTranscriptAvailable: false,
+    nextRetryAt: null,
+    publishedAt: new Date("2026-05-01T12:00:00Z"),
+    ...overrides,
+  };
+}
+
+describe("getQueueCandidatePriority", () => {
+  it("prioritizes waiting rows with completed transcripts ahead of queued backlog", () => {
+    const queued = makeQueueCandidate({
+      status: "queued",
+      publishedAt: new Date("2026-05-26T12:00:00Z"),
+    });
+    const completedTranscriptWait = makeQueueCandidate({
+      status: "waiting_for_transcript",
+      completedTranscriptAvailable: true,
+      nextRetryAt: new Date(NOW.getTime() + 3600 * 1000),
+    });
+
+    expect(getQueueCandidatePriority(completedTranscriptWait, NOW)).toBeLessThan(
+      getQueueCandidatePriority(queued, NOW),
+    );
+  });
+
+  it("prioritizes due transcript retries ahead of queued backlog", () => {
+    const queued = makeQueueCandidate({
+      status: "queued",
+      publishedAt: new Date("2026-05-26T12:00:00Z"),
+    });
+    const dueTranscriptWait = makeQueueCandidate({
+      status: "waiting_for_transcript",
+      nextRetryAt: new Date(NOW.getTime() - 60 * 1000),
+    });
+
+    expect(getQueueCandidatePriority(dueTranscriptWait, NOW)).toBeLessThan(
+      getQueueCandidatePriority(queued, NOW),
+    );
+  });
+
+  it("does not prioritize future transcript waits ahead of queued work", () => {
+    const queued = makeQueueCandidate({ status: "queued" });
+    const futureTranscriptWait = makeQueueCandidate({
+      status: "waiting_for_transcript",
+      nextRetryAt: new Date(NOW.getTime() + 60 * 1000),
+    });
+
+    expect(getQueueCandidatePriority(futureTranscriptWait, NOW)).toBeGreaterThan(
+      getQueueCandidatePriority(queued, NOW),
+    );
   });
 });

@@ -20,6 +20,13 @@ export type WaitingTranscriptState = {
   completedAt?: Date | null;
 };
 
+export type QueueCandidateState = {
+  status: string;
+  completedTranscriptAvailable?: boolean;
+  nextRetryAt: Date | null;
+  publishedAt: Date | null;
+};
+
 export function shouldRetryItem(
   item: RetryableItemState,
   now: Date,
@@ -83,4 +90,27 @@ export function shouldRetryWaitingTranscript(
   }
 
   return true;
+}
+
+export function getQueueCandidatePriority(item: QueueCandidateState, now: Date) {
+  if (item.status === "waiting_for_transcript" && item.completedTranscriptAvailable) {
+    return 0;
+  }
+  if (
+    item.status === "waiting_for_transcript" &&
+    item.nextRetryAt &&
+    item.nextRetryAt.getTime() <= now.getTime()
+  ) {
+    return 0;
+  }
+  if (item.status === "queued") {
+    return 2;
+  }
+  if (item.status === "failed") {
+    return 3;
+  }
+  if (item.status === "processing") {
+    return 4;
+  }
+  return 5;
 }

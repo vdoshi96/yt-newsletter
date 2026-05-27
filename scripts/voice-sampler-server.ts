@@ -8,7 +8,7 @@ const host = "127.0.0.1";
 const port = numberEnv("VOICE_SAMPLER_PORT", 4317);
 const outputDir = path.join(process.cwd(), "tmp", "voice-sampler");
 const openAiModel = process.env.OPENAI_TTS_MODEL ?? "gpt-4o-mini-tts";
-const geminiModel = process.env.GEMINI_TTS_MODEL ?? "gemini-3.1-flash-tts-preview";
+const geminiModel = process.env.GEMINI_TTS_MODEL ?? "gemini-2.5-flash-preview-tts";
 
 type Provider = "openai" | "gemini";
 

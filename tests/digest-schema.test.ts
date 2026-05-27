@@ -94,6 +94,25 @@ describe("digest schemas", () => {
     expect(parsed.source_notes[0].quote).toBe("Grounded transcript quote.");
   });
 
+  it("normalizes partial explanation-level payloads instead of rejecting provider output", () => {
+    const parsed = dailyDigestSchema.parse({
+      layout_type: "single_big_story",
+      title: "Partial level payload",
+      dek: "A provider returned only one full level.",
+      front_page_summary: "The digest is grounded and readable.",
+      plain_english_explanation: "Plain explanation fallback.",
+      why_it_matters: "It keeps a recoverable provider response from wedging ingestion.",
+      skepticism_notes: "Check the transcript grounding before trusting the digest.",
+      full_level_versions: {
+        beginner: "A beginner version exists.",
+      },
+    });
+
+    expect(parsed.full_level_versions.beginner).toBe("A beginner version exists.");
+    expect(parsed.full_level_versions.intermediate).toContain("Level 2 explanation unavailable");
+    expect(parsed.full_level_versions.advanced).toContain("Level 3 explanation unavailable");
+  });
+
   it("accepts a weekly newsletter payload with a podcast script", () => {
     const parsed = weeklyDigestSchema.parse({
       title: "This week in practical AI",

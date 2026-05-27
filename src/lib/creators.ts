@@ -243,36 +243,53 @@ export async function createIngestJob(input: {
 }) {
   const sql = getSql();
   const estimatedSeconds = estimateIngestSeconds(input.videoIds.length);
-  const rows = await sql<{ id: string }[]>`
-    insert into ingest_jobs (
-      user_id,
-      creator_id,
-      requested_video_count,
-      status,
-      total_count,
-      estimated_seconds
-    )
-    values (
-      ${input.userId},
-      ${input.creatorId},
-      ${input.requestedCount},
-      ${input.videoIds.length > 0 ? "queued" : "completed"},
-      ${input.videoIds.length},
-      ${estimatedSeconds}
-    )
-    returning id
-  `;
-  const jobId = rows[0].id;
-
-  for (const videoId of input.videoIds) {
-    await sql`
-      insert into ingest_job_items (job_id, video_id, status)
-      values (${jobId}, ${videoId}, 'queued')
-      on conflict (job_id, video_id) do nothing
+  return sql.begin(async (transaction) => {
+    const rows = await transaction<{ id: string }[]>`
+      insert into ingest_jobs (
+        user_id,
+        creator_id,
+        requested_video_count,
+        status,
+        total_count,
+        estimated_seconds
+      )
+      values (
+        ${input.userId},
+        ${input.creatorId},
+        ${input.requestedCount},
+        ${input.videoIds.length > 0 ? "queued" : "completed"},
+        ${input.videoIds.length},
+        ${estimatedSeconds}
+      )
+      returning id
     `;
-  }
+    const jobId = rows[0].id;
+    let insertedCount = 0;
 
-  return jobId;
+    for (const videoId of input.videoIds) {
+      const inserted = await transaction<{ id: string }[]>`
+        insert into ingest_job_items (job_id, video_id, status)
+        values (${jobId}, ${videoId}, 'queued')
+        on conflict (video_id) where completed_at is null
+          and status in ('queued', 'processing', 'waiting_for_transcript', 'generating_digest', 'generating_assets')
+        do nothing
+        returning id
+      `;
+      insertedCount += inserted.length;
+    }
+
+    await transaction`
+      update ingest_jobs
+      set
+        total_count = ${insertedCount},
+        status = ${insertedCount > 0 ? "queued" : "completed"},
+        completed_at = ${insertedCount > 0 ? null : new Date().toISOString()},
+        updated_at = now()
+      where id = ${jobId}
+    `;
+
+    return jobId;
+  });
 }
 
 export async function seedStarterCreator() {

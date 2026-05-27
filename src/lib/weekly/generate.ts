@@ -1,13 +1,11 @@
 import { generatePodcastScriptPayload, generateWeeklyDigestPayload } from "@/lib/ai";
-import { booleanEnv } from "@/lib/config";
+import { booleanEnv, numberEnv } from "@/lib/config";
+import { normalizeConcurrency, runBoundedConcurrency } from "@/lib/concurrency";
 import { getSql } from "@/lib/db";
 import { minimumTranscriptCharacters } from "@/lib/digests/grounding";
 import { loadPrompt } from "@/lib/prompts";
-import {
-  buildTwoHostPodcastLines,
-  formatTwoHostPodcastScript,
-  getPodcastCastForWeek,
-} from "@/lib/podcasts/two-host";
+import { getPodcastCastForWeek } from "@/lib/podcasts/two-host";
+import { resolvePodcastScript } from "@/lib/podcasts/script-quality";
 import {
   getPodcastAudioConfig,
   getPodcastScriptConfig,
@@ -69,16 +67,28 @@ export async function ensureCompletedWeeklyDigestsForCreator(input: {
   }
 
   const weekDigestIds: string[] = [];
-  for (const range of rangesByStart.values()) {
+  const ranges = [...rangesByStart.values()];
+  const concurrency = getWeeklyDigestConcurrency(ranges.length);
+  const generatedIds = await runBoundedConcurrency(ranges, concurrency, async (range) => {
     const id = await ensureWeeklyDigestForRange({
       creatorId: input.creatorId,
       range,
       forceRegenerate: input.forceRegenerate,
     });
+    return id;
+  });
+  for (const id of generatedIds) {
     if (id) weekDigestIds.push(id);
   }
 
   return { weekCount: weekDigestIds.length, weekDigestIds };
+}
+
+function getWeeklyDigestConcurrency(itemCount: number) {
+  return Math.min(
+    normalizeConcurrency(numberEnv("WEEKLY_DIGEST_CONCURRENCY", 2)),
+    Math.max(1, itemCount),
+  );
 }
 
 export async function ensureWeeklyDigestForRange(input: {
@@ -137,17 +147,14 @@ export async function ensureWeeklyDigestForRange(input: {
   });
   const cast = getPodcastCastForWeek(weekStart);
   const scriptConfig = getPodcastScriptConfig();
-  const fallbackPodcastScript = formatTwoHostPodcastScript(
-    buildTwoHostPodcastLines(generatedPayload, scriptConfig, cast),
-  );
   const podcastPrompt = await loadPrompt("podcast_script");
-  let podcastScript = fallbackPodcastScript;
   let providerPodcastGeneration: Record<string, unknown> = {
     status: "script_generated",
     provider: "local",
     model: "deterministic:two-host-builder",
     generated_at: new Date().toISOString(),
   };
+  let candidatePodcastScript: string | null = null;
   if (scriptConfig.generationMode === "provider_script") {
     try {
       const providerScript = await generatePodcastScriptPayload({
@@ -159,7 +166,7 @@ export async function ensureWeeklyDigestForRange(input: {
         prompt: podcastPrompt,
         hostNames: cast.label,
       });
-      podcastScript = providerScript.podcast_script;
+      candidatePodcastScript = providerScript.podcast_script;
       providerPodcastGeneration = providerScript.podcast_generation;
     } catch (error) {
       console.warn("[podcast:provider-script-fallback]", {
@@ -169,6 +176,22 @@ export async function ensureWeeklyDigestForRange(input: {
       });
     }
   }
+  const resolvedPodcastScript = resolvePodcastScript({
+    candidateScript: candidatePodcastScript,
+    candidateSource: "provider",
+    digest: generatedPayload,
+    config: scriptConfig,
+    cast,
+  });
+  if (resolvedPodcastScript.replacedShortScript) {
+    console.warn("[podcast:short-script-fallback]", {
+      creatorId: input.creatorId,
+      weekStart,
+      originalWordCount: resolvedPodcastScript.originalWordCount,
+      minimumWordCount: resolvedPodcastScript.minimumWordCount,
+    });
+  }
+  const podcastScript = resolvedPodcastScript.script;
   const payload = {
     ...generatedPayload,
     source_references: sourceReferences,
@@ -176,9 +199,15 @@ export async function ensureWeeklyDigestForRange(input: {
     podcast_generation: {
       ...generatedPayload.podcast_generation,
       ...providerPodcastGeneration,
+      status: resolvedPodcastScript.replacedShortScript
+        ? "script_generated_with_deterministic_fallback"
+        : providerPodcastGeneration.status,
       target_minutes: scriptConfig.targetMinutes,
       words_per_minute: scriptConfig.wordsPerMinute,
-      word_count: countWords(podcastScript),
+      word_count: resolvedPodcastScript.wordCount,
+      minimum_word_count: resolvedPodcastScript.minimumWordCount,
+      script_source: resolvedPodcastScript.source,
+      original_word_count: resolvedPodcastScript.originalWordCount,
       cast_id: cast.id,
       source_references: sourceReferences,
     },
@@ -359,10 +388,6 @@ async function maybeGeneratePodcastAudio(input: {
     where id = ${input.weeklyDigestId}
   `;
   return assets[0].id;
-}
-
-function countWords(text: string) {
-  return text.split(/\s+/).filter(Boolean).length;
 }
 
 function toJsonParameter(value: unknown) {

@@ -1,4 +1,5 @@
 import { generatePodcastScriptPayload } from "@/lib/ai";
+import { normalizeConcurrency, runBoundedConcurrency } from "@/lib/concurrency";
 import { numberEnv } from "@/lib/config";
 import { getSql } from "@/lib/db";
 import { weeklyDigestSchema } from "@/lib/digests/schemas";
@@ -10,10 +11,12 @@ import {
   formatTwoHostPodcastScript,
   getPodcastCastForWeek,
   type PodcastHostCast,
-  type PodcastHostKey,
   type PodcastLine,
 } from "./two-host";
 import { getPodcastAudioConfig, getPodcastScriptConfig } from "./config";
+import {
+  resolvePodcastScript,
+} from "./script-quality";
 
 type WeeklyDigestRow = {
   id: string;
@@ -66,30 +69,39 @@ export async function generateDueWeeklyPodcasts(input: {
   }
 
   const rows = await getWeeklyDigests(input);
-  let generated = 0;
-  let failed = 0;
-
-  for (const row of rows) {
+  const concurrency = getPodcastGenerationConcurrency(rows.length);
+  const outcomes = await runBoundedConcurrency(rows, concurrency, async (row) => {
     try {
       await generatePodcastForWeek({ apiKey, row });
-      generated += 1;
+      return "generated" as const;
     } catch (error) {
-      failed += 1;
       await markPodcastFailed(row.id, (error as Error).message);
       console.error("[podcast-cron:week-failed]", {
         weeklyDigestId: row.id,
         weekStart: row.week_start,
         message: (error as Error).message,
       });
+      return "failed" as const;
     }
-  }
+  });
+
+  const generated = outcomes.filter((status) => status === "generated").length;
+  const failed = outcomes.filter((status) => status === "failed").length;
 
   return {
     checked: rows.length,
     generated,
     failed,
     limit: input.limit ?? numberEnv("PODCASTS_PER_CRON_RUN", 1),
+    concurrency,
   };
+}
+
+function getPodcastGenerationConcurrency(itemCount: number) {
+  return Math.min(
+    normalizeConcurrency(numberEnv("PODCAST_GENERATION_CONCURRENCY", 1)),
+    Math.max(1, itemCount),
+  );
 }
 
 async function getWeeklyDigests(input: {
@@ -134,7 +146,8 @@ async function generatePodcastForWeek(input: { apiKey: string; row: WeeklyDigest
   const digest = weeklyDigestSchema.parse(input.row.full_digest_json);
   const cast = getPodcastCastForWeek(input.row.week_start);
   const sourceText = JSON.stringify(digest.source_references ?? digest.source_notes);
-  const script = input.row.podcast_script?.trim() || await generatePodcastScript({
+  const storedScript = input.row.podcast_script?.trim();
+  const candidateScript = storedScript || await generatePodcastScript({
     creatorId: input.row.creator_id,
     weekStart: input.row.week_start,
     weekEnd: input.row.week_end,
@@ -142,8 +155,24 @@ async function generatePodcastForWeek(input: { apiKey: string; row: WeeklyDigest
     sourceText,
     hostNames: cast.label,
   });
-  const lines = parsePodcastScript(script, cast, digest);
-  const wordCount = countWords(script);
+  const resolvedScript = resolvePodcastScript({
+    candidateScript,
+    candidateSource: storedScript ? "stored" : "provider",
+    digest,
+    config: scriptConfig,
+    cast,
+  });
+  if (resolvedScript.replacedShortScript) {
+    console.warn("[podcast-cron:short-script-fallback]", {
+      weeklyDigestId: input.row.id,
+      weekStart: input.row.week_start,
+      originalWordCount: resolvedScript.originalWordCount,
+      minimumWordCount: resolvedScript.minimumWordCount,
+    });
+  }
+  const script = resolvedScript.script;
+  const lines = resolvedScript.lines;
+  const wordCount = resolvedScript.wordCount;
   const sourceReferences = digest.source_references.length
     ? digest.source_references
     : digest.source_notes.map((note) => ({
@@ -234,41 +263,6 @@ async function generatePodcastScript(input: {
   return providerScript.podcast_script;
 }
 
-function parsePodcastScript(
-  script: string,
-  cast: PodcastHostCast,
-  digest: ReturnType<typeof weeklyDigestSchema.parse>,
-) {
-  const parsed = parseStoredPodcastScript(script, cast);
-  return parsed.length ? parsed : buildTwoHostPodcastLines(digest, scriptConfig, cast);
-}
-
-function parseStoredPodcastScript(script: string, cast: PodcastHostCast): PodcastLine[] {
-  const hostByName = new Map<string, PodcastHostKey>([
-    [cast.hosts.primary.name.toLowerCase(), "primary"],
-    [cast.hosts.secondary.name.toLowerCase(), "secondary"],
-  ]);
-  const paragraphs = script
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
-  let fallbackHost: PodcastHostKey = "primary";
-  return paragraphs.map((paragraph, index) => {
-    const match = paragraph.match(/^(?:\*\*)?([A-Za-z][A-Za-z\s'-]{0,40})(?:\*\*)?:\s*([\s\S]+)$/);
-    const parsedHost = match ? hostByName.get(match[1].trim().toLowerCase()) : undefined;
-    const host = parsedHost ?? fallbackHost;
-    const text = (match?.[2] ?? paragraph).trim();
-    fallbackHost = host === "primary" ? "secondary" : "primary";
-    return {
-      host,
-      hostName: cast.hosts[host].name,
-      section: inferPodcastSection(text, index, paragraphs.length),
-      pauseAfterMs: text.includes("[pause]") || text.includes("[beat]") ? 900 : undefined,
-      text,
-    };
-  });
-}
-
 function splitPodcastLinesForTts(lines: PodcastLine[], maxCharacters: number) {
   const splitLines: PodcastLine[] = [];
   for (const line of lines) {
@@ -337,7 +331,12 @@ async function synthesizeGeminiPodcast(input: {
   let lastError: Error | null = null;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      const response = await fetch(
+      const { response, body } = await fetchPodcastTtsJson<{
+        error?: { message?: string };
+        candidates?: Array<{
+          content?: { parts?: Array<{ inlineData?: { data?: string } }> };
+        }>;
+      }>(
         `https://generativelanguage.googleapis.com/v1beta/models/${audioConfig.ttsModel}:generateContent`,
         {
           method: "POST",
@@ -388,12 +387,6 @@ async function synthesizeGeminiPodcast(input: {
           }),
         },
       );
-      const body = (await response.json().catch(() => ({}))) as {
-        error?: { message?: string };
-        candidates?: Array<{
-          content?: { parts?: Array<{ inlineData?: { data?: string } }> };
-        }>;
-      };
       const data = body.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (response.ok && data) {
         return createWav(Buffer.from(data, "base64"));
@@ -411,6 +404,68 @@ async function synthesizeGeminiPodcast(input: {
   }
 
   throw lastError ?? new Error("Gemini TTS failed.");
+}
+
+async function fetchPodcastTtsJson<T>(url: string, init: RequestInit = {}) {
+  const { response, read } = await fetchPodcastTtsWithBodyTimeout(url, init);
+  const body = await read(() => readJsonObject(response));
+  return { response, body: body as T };
+}
+
+async function fetchPodcastTtsWithBodyTimeout(url: string, init: RequestInit = {}) {
+  const controller = new AbortController();
+  const timeoutMs = numberEnv("PODCAST_TTS_TIMEOUT_MS", 300_000);
+  let timedOut = false;
+  const timeoutError = () => new Error(`Podcast TTS request timed out after ${timeoutMs}ms.`);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      reject(timeoutError());
+    }, timeoutMs);
+  });
+  try {
+    const response = await Promise.race([
+      fetch(url, {
+        ...init,
+        signal: controller.signal,
+      }),
+      timeoutPromise,
+    ]);
+    return {
+      response,
+      read: async <T>(reader: () => Promise<T>) => {
+        try {
+          return await Promise.race([reader(), timeoutPromise]);
+        } catch (error) {
+          if (timedOut || (error instanceof Error && error.name === "AbortError")) {
+            throw timeoutError();
+          }
+          throw error;
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      },
+    };
+  } catch (error) {
+    if (timer) clearTimeout(timer);
+    if (timedOut || (error instanceof Error && error.name === "AbortError")) {
+      throw timeoutError();
+    }
+    throw error;
+  }
+}
+
+async function readJsonObject(response: Response) {
+  try {
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw error;
+    }
+    return {};
+  }
 }
 
 function createWav(pcm: Buffer, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
@@ -667,28 +722,6 @@ async function markPodcastFailed(weeklyDigestId: string, message: string) {
   `;
 }
 
-function inferPodcastSection(
-  text: string,
-  index: number,
-  total: number,
-): PodcastLine["section"] {
-  const lower = text.toLowerCase();
-  if (index <= 1) return "cold_open";
-  if (lower.includes("source") || lower.includes("grounded")) return "source_contract";
-  if (lower.includes("market") || lower.includes("executive") || lower.includes("board")) {
-    return "market";
-  }
-  if (lower.includes("research") || lower.includes("evidence")) return "research";
-  if (lower.includes("takeaway") || lower.includes("try this") || lower.includes("next step")) {
-    return "practical";
-  }
-  if (lower.includes("uncertain") || lower.includes("uncertainty") || lower.includes("caveat")) {
-    return "uncertainty";
-  }
-  if (index >= total - 2 || lower.includes("that is the week")) return "closing";
-  return "topic";
-}
-
 function defaultPauseAfterLine(current: PodcastLine["section"], next?: PodcastLine["section"]) {
   if (!next || current !== next) return 900;
   if (current === "cold_open" || current === "closing") return 750;
@@ -714,10 +747,6 @@ function estimateAudioCostUsd(characterCount: number) {
   const perMinute = numberEnv("GEMINI_TTS_ESTIMATED_COST_PER_MINUTE", 0.015);
   const estimatedMinutes = Math.max(1, characterCount / 900);
   return Number((estimatedMinutes * perMinute).toFixed(4));
-}
-
-function countWords(text: string) {
-  return text.split(/\s+/).filter(Boolean).length;
 }
 
 function toJsonParameter(value: unknown) {

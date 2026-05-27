@@ -34,12 +34,13 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 - Hourly transcript retry recovery for daily uploads that were parked behind legacy 24-hour retry windows
 - Extended transcript retries after the hourly retry budget, so missing transcripts stay blocked/retryable instead of terminally failing
 - Daily podcast-audio cron retry path for ready weekly rows with missing or failed audio
+- Bounded batch worker pools for daily ingest processing, weekly digest synthesis, and podcast generation, controlled by `INGEST_PROCESS_CONCURRENCY`, `WEEKLY_DIGEST_CONCURRENCY`, and `PODCAST_GENERATION_CONCURRENCY`
 
 ## Verification
 
 Last known local checks:
 
-- `2026-05-26 npm test`: passing, 126 tests
+- `2026-05-26 npm test`: passing, 137 tests
 - `2026-05-26 npm run lint`: passing
 - `2026-05-26 npx tsc --noEmit`: passing
 - `2026-05-26 npm run build`: passing
@@ -53,4 +54,4 @@ Last known local checks:
 
 ## Open Blockers
 
-- **2026-05-26 — Daily ingestion reliability follow-up.** The active fix set keeps transcript waits retryable on an extended cadence after the hourly retry budget, bounds transcript fetches with `TRANSCRIPT_FETCH_TIMEOUT_MS`, reconciles waiting rows when a completed `youtube_transcript_free` transcript exists, prevents exhausted stale `processing` rows from reclaiming forever, and adds `npm run ingest:recover` as the dry-run-first recovery path for rows wedged by old transcript behavior. Daily discovery/processing no longer runs weekly generation inline; weekly and podcast work stay behind dedicated cron routes.
+- **2026-05-26 — Daily ingestion reliability follow-up.** The active fix set keeps transcript waits retryable on an extended cadence after the hourly retry budget, bounds transcript fetches with `TRANSCRIPT_FETCH_TIMEOUT_MS`, reconciles waiting rows when a completed `youtube_transcript_free` transcript exists, prevents exhausted stale `processing` rows from reclaiming forever, prevents duplicate open ingest rows per video, and adds `npm run ingest:recover` as the dry-run-first recovery path for rows wedged by old transcript behavior. Daily discovery/processing no longer runs weekly generation inline; weekly and podcast work stay behind dedicated cron routes with bounded parallel batch execution.

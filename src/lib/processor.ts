@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { generateDailyDigestPayload } from "@/lib/ai";
 import { isBaselineMainVideo } from "@/lib/baseline/month";
+import { normalizeConcurrency, runBoundedConcurrency } from "@/lib/concurrency";
 import { booleanEnv, numberEnv } from "@/lib/config";
 import { getSql } from "@/lib/db";
 import { digestDateFromPublishedAt } from "@/lib/digests/date";
@@ -45,7 +46,8 @@ export async function processIngestQueue(
   options: ProcessIngestQueueOptions = {},
 ) {
   const sql = getSql();
-  logIngest("queue-scan-started", { limit });
+  const concurrency = getIngestProcessConcurrency(limit);
+  logIngest("queue-scan-started", { limit, concurrency });
   const terminalizedStaleProcessing = await markExhaustedStaleProcessingRows();
   const candidateCounts = await getQueueScanCandidateCounts();
   logIngest("queue-scan-candidates", {
@@ -113,12 +115,44 @@ export async function processIngestQueue(
         )
       order by
         case
-          when ingest_job_items.status = 'queued' then 0
-          when ingest_job_items.status = 'failed' then 1
-          when ingest_job_items.status = 'waiting_for_transcript' then 2
-          else 3
+          when ingest_job_items.status = 'waiting_for_transcript'
+            and exists (
+              select 1
+              from transcripts
+              where transcripts.video_id = videos.id
+                and transcripts.source = 'youtube_transcript_free'
+                and transcripts.status = 'completed'
+                and transcripts.transcript_text is not null
+            )
+            then 0
+          when ingest_job_items.status = 'waiting_for_transcript'
+            and (
+              ingest_job_items.next_retry_at <= now()
+              or (
+                ingest_job_items.next_retry_at is null
+                and exists (
+                  select 1
+                  from transcripts
+                  where transcripts.video_id = videos.id
+                    and transcripts.source = 'youtube_transcript_free'
+                    and transcripts.needs_retry = true
+                    and (
+                      transcripts.retry_after is null
+                      or transcripts.retry_after <= now()
+                      or transcripts.updated_at <= now() - make_interval(secs => ${TRANSCRIPT_RETRY_DELAY_SECONDS}::int)
+                    )
+                )
+              )
+            )
+            then 0
+          when ingest_job_items.status = 'queued' then 2
+          when ingest_job_items.status = 'failed' then 3
+          else 4
         end,
-        case when ingest_job_items.status = 'queued' then videos.published_at end desc nulls last,
+        case
+          when ingest_job_items.status in ('waiting_for_transcript', 'queued')
+            then videos.published_at
+        end desc nulls last,
         coalesce(ingest_job_items.next_retry_at, ingest_job_items.created_at) asc,
         videos.published_at desc nulls last,
         ingest_job_items.created_at asc
@@ -169,14 +203,14 @@ export async function processIngestQueue(
     select * from claimed
   `);
 
-  logIngest("queue-scan-finished", { discoveredItems: items.length, limit });
-  let processed = 0;
-  for (const item of items) {
+  logIngest("queue-scan-finished", { discoveredItems: items.length, limit, concurrency });
+  await runBoundedConcurrency(items, concurrency, async (item) => {
     await processQueueItem(item, options);
-    processed += 1;
-  }
+    return item.item_id;
+  });
+  const processed = items.length;
 
-  return { processed, limit };
+  return { processed, limit, concurrency };
 }
 
 export async function refreshCreatorsAndProcessQueue(
@@ -190,6 +224,13 @@ export async function refreshCreatorsAndProcessQueue(
     processed: processing.processed,
     limit: processing.limit,
   };
+}
+
+function getIngestProcessConcurrency(limit: number) {
+  return Math.min(
+    normalizeConcurrency(numberEnv("INGEST_PROCESS_CONCURRENCY", 2)),
+    Math.max(1, limit),
+  );
 }
 
 async function getQueueScanCandidateCounts() {

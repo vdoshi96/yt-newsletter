@@ -43,7 +43,7 @@ export function getPodcastAudioConfig(): PodcastAudioConfig {
     ttsModel:
       cleanOptional(process.env.PODCAST_TTS_MODEL) ??
       (provider === "gemini_flash"
-        ? cleanOptional(process.env.GEMINI_TTS_MODEL) ?? "gemini-3.1-flash-tts-preview"
+        ? cleanOptional(process.env.GEMINI_TTS_MODEL) ?? "gemini-2.5-flash-preview-tts"
         : cleanOptional(process.env.QWEN_TTS_MODEL) ?? "qwen3-tts-vd-2026-01-26"),
     voiceDesignModel: process.env.QWEN_VOICE_DESIGN_MODEL ?? "qwen-voice-design",
     femaleVoice:

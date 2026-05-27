@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { closeSql, getSql } from "@/lib/db";
 import { weeklyDigestSchema } from "@/lib/digests/schemas";
+import { normalizeConcurrency, runBoundedConcurrency } from "@/lib/concurrency";
 import {
   buildTwoHostPodcastLines,
   formatTwoHostPodcastScript,
@@ -15,6 +16,7 @@ import {
   type PodcastLine,
 } from "@/lib/podcasts/two-host";
 import { getPodcastAudioConfig, getPodcastScriptConfig } from "@/lib/podcasts/config";
+import { resolvePodcastScript } from "@/lib/podcasts/script-quality";
 import { uploadGeneratedAsset } from "@/lib/supabase/storage";
 import { isWeeklyPodcastReady } from "@/lib/weekly/week-range";
 
@@ -45,7 +47,7 @@ const ttsModel =
 const geminiModel =
   audioConfig.provider === "gemini_flash"
     ? audioConfig.ttsModel
-    : process.env.GEMINI_TTS_MODEL ?? "gemini-3.1-flash-tts-preview";
+    : process.env.GEMINI_TTS_MODEL ?? "gemini-2.5-flash-preview-tts";
 
 type WeeklyDigestRow = {
   id: string;
@@ -98,17 +100,27 @@ async function main() {
       return;
     }
 
-    for (const row of rows) {
+    const concurrency = getPodcastGenerationConcurrency(rows.length);
+    console.log(`Generating ${rows.length} podcast(s) with concurrency ${concurrency}.`);
+    await runBoundedConcurrency(rows, concurrency, async (row) => {
       try {
         await generatePodcastForWeek({ apiKey: apiKey ?? "", row });
       } catch (error) {
         await markPodcastFailed(row.id, (error as Error).message);
         console.error(`Podcast generation failed for ${row.week_start}: ${(error as Error).message}`);
       }
-    }
+    });
   } finally {
     await closeSql();
   }
+}
+
+function getPodcastGenerationConcurrency(itemCount: number) {
+  const argConcurrency = Number(args.get("concurrency"));
+  const configured = Number.isFinite(argConcurrency) && argConcurrency > 0
+    ? argConcurrency
+    : numberEnv("PODCAST_GENERATION_CONCURRENCY", 1);
+  return Math.min(normalizeConcurrency(configured), Math.max(1, itemCount));
 }
 
 async function getWeeklyDigests() {
@@ -273,11 +285,24 @@ async function generatePodcastForWeek(input: {
   const digest = weeklyDigestSchema.parse(input.row.full_digest_json);
   const cast = getPodcastCastForWeek(input.row.week_start);
   const storedScript = input.row.podcast_script?.trim();
-  const lines = storedScript
-    ? parseStoredPodcastScript(storedScript, cast)
-    : buildTwoHostPodcastLines(digest, scriptConfig, cast);
-  const script = storedScript || formatTwoHostPodcastScript(lines);
-  const wordCount = countWords(script);
+  const resolvedScript = resolvePodcastScript({
+    candidateScript: storedScript,
+    candidateSource: "stored",
+    digest,
+    config: scriptConfig,
+    cast,
+  });
+  if (resolvedScript.replacedShortScript) {
+    console.warn("[podcast-cli:short-script-fallback]", {
+      weeklyDigestId: input.row.id,
+      weekStart: input.row.week_start,
+      originalWordCount: resolvedScript.originalWordCount,
+      minimumWordCount: resolvedScript.minimumWordCount,
+    });
+  }
+  const lines = resolvedScript.lines;
+  const script = resolvedScript.script;
+  const wordCount = resolvedScript.wordCount;
   const voiceConfig = buildVoiceConfig(cast);
   const sourceReferences = digest.source_references.length
     ? digest.source_references
@@ -403,54 +428,6 @@ async function generatePodcastForWeek(input: {
   }
 }
 
-function parseStoredPodcastScript(script: string, cast: PodcastHostCast): PodcastLine[] {
-  const hostByName = new Map<string, PodcastHostKey>([
-    [cast.hosts.primary.name.toLowerCase(), "primary"],
-    [cast.hosts.secondary.name.toLowerCase(), "secondary"],
-  ]);
-  const paragraphs = script
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
-  let fallbackHost: PodcastHostKey = "primary";
-  return paragraphs.map((paragraph, index) => {
-    const match = paragraph.match(/^(?:\*\*)?([A-Za-z][A-Za-z\s'-]{0,40})(?:\*\*)?:\s*([\s\S]+)$/);
-    const parsedHost = match ? hostByName.get(match[1].trim().toLowerCase()) : undefined;
-    const host = parsedHost ?? fallbackHost;
-    const text = (match?.[2] ?? paragraph).trim();
-    fallbackHost = host === "primary" ? "secondary" : "primary";
-    return {
-      host,
-      hostName: cast.hosts[host].name,
-      section: inferPodcastSection(text, index, paragraphs.length),
-      pauseAfterMs: text.includes("[pause]") || text.includes("[beat]") ? 900 : undefined,
-      text,
-    };
-  });
-}
-
-function inferPodcastSection(
-  text: string,
-  index: number,
-  total: number,
-): PodcastLine["section"] {
-  const lower = text.toLowerCase();
-  if (index <= 1) return "cold_open";
-  if (lower.includes("source") || lower.includes("grounded")) return "source_contract";
-  if (lower.includes("market") || lower.includes("executive") || lower.includes("board")) {
-    return "market";
-  }
-  if (lower.includes("research") || lower.includes("evidence")) return "research";
-  if (lower.includes("takeaway") || lower.includes("try this") || lower.includes("next step")) {
-    return "practical";
-  }
-  if (lower.includes("uncertain") || lower.includes("uncertainty") || lower.includes("caveat")) {
-    return "uncertainty";
-  }
-  if (index >= total - 2 || lower.includes("that is the week")) return "closing";
-  return "topic";
-}
-
 async function synthesizeGeminiPodcast(input: {
   apiKey: string;
   cast: PodcastHostCast;
@@ -460,7 +437,12 @@ async function synthesizeGeminiPodcast(input: {
   let lastError: Error | null = null;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      const response = await fetch(
+      const { response, body } = await fetchPodcastTtsJson<{
+        error?: { message?: string };
+        candidates?: Array<{
+          content?: { parts?: Array<{ inlineData?: { data?: string } }> };
+        }>;
+      }>(
         `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`,
         {
           method: "POST",
@@ -511,12 +493,6 @@ async function synthesizeGeminiPodcast(input: {
           }),
         },
       );
-      const body = (await response.json().catch(() => ({}))) as {
-        error?: { message?: string };
-        candidates?: Array<{
-          content?: { parts?: Array<{ inlineData?: { data?: string } }> };
-        }>;
-      };
       const data = body.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (response.ok && data) {
         await writeFile(input.outputPath, createWav(Buffer.from(data, "base64")));
@@ -543,7 +519,7 @@ async function synthesizeQwenLine(input: {
   text: string;
   outputPath: string;
 }) {
-  const response = await fetch(ttsUrl, {
+  const { response, body } = await fetchPodcastTtsJson<{ output?: { audio?: { url?: string } } }>(ttsUrl, {
     method: "POST",
     headers: {
       authorization: `Bearer ${input.apiKey}`,
@@ -558,16 +534,83 @@ async function synthesizeQwenLine(input: {
       },
     }),
   });
-  const body = await response.json().catch(() => ({}));
   const audioUrl = body?.output?.audio?.url;
   if (!response.ok || !audioUrl) {
     throw new Error(`Qwen TTS failed with status ${response.status}.`);
   }
-  const audioResponse = await fetch(String(audioUrl));
+  const { response: audioResponse, buffer } = await fetchPodcastTtsBuffer(String(audioUrl));
   if (!audioResponse.ok) {
     throw new Error(`Could not download Qwen audio: ${audioResponse.status}.`);
   }
-  await writeFile(input.outputPath, Buffer.from(await audioResponse.arrayBuffer()));
+  await writeFile(input.outputPath, Buffer.from(buffer));
+}
+
+async function fetchPodcastTtsJson<T>(url: string, init: RequestInit = {}) {
+  const { response, read } = await fetchPodcastTtsWithBodyTimeout(url, init);
+  const body = await read(() => readJsonObject(response));
+  return { response, body: body as T };
+}
+
+async function fetchPodcastTtsBuffer(url: string, init: RequestInit = {}) {
+  const { response, read } = await fetchPodcastTtsWithBodyTimeout(url, init);
+  const buffer = await read(() => response.arrayBuffer());
+  return { response, buffer };
+}
+
+async function fetchPodcastTtsWithBodyTimeout(url: string, init: RequestInit = {}) {
+  const controller = new AbortController();
+  const timeoutMs = numberEnv("PODCAST_TTS_TIMEOUT_MS", 300_000);
+  let timedOut = false;
+  const timeoutError = () => new Error(`Podcast TTS request timed out after ${timeoutMs}ms.`);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      reject(timeoutError());
+    }, timeoutMs);
+  });
+  try {
+    const response = await Promise.race([
+      fetch(url, {
+        ...init,
+        signal: controller.signal,
+      }),
+      timeoutPromise,
+    ]);
+    return {
+      response,
+      read: async <T>(reader: () => Promise<T>) => {
+        try {
+          return await Promise.race([reader(), timeoutPromise]);
+        } catch (error) {
+          if (timedOut || (error instanceof Error && error.name === "AbortError")) {
+            throw timeoutError();
+          }
+          throw error;
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      },
+    };
+  } catch (error) {
+    if (timer) clearTimeout(timer);
+    if (timedOut || (error instanceof Error && error.name === "AbortError")) {
+      throw timeoutError();
+    }
+    throw error;
+  }
+}
+
+async function readJsonObject(response: Response) {
+  try {
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw error;
+    }
+    return {};
+  }
 }
 
 async function createSilenceSegment(input: { outputPath: string; durationMs: number }) {
@@ -964,10 +1007,6 @@ function numberEnv(name: string, fallback: number) {
 function numericArg(name: string, fallback: number) {
   const value = Number(args.get(name));
   return Number.isFinite(value) && value > 0 ? value : fallback;
-}
-
-function countWords(text: string) {
-  return text.split(/\s+/).filter(Boolean).length;
 }
 
 function toJsonParameter(value: unknown) {

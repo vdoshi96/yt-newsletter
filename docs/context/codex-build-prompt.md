@@ -82,7 +82,7 @@ Do not do these:
 - Do not generate or backfill content from titles alone.
 - Do not mark transcript-missing rows as final.
 - Do not blindly commit the current dirty worktree as the fix.
-- Do not implement an unbounded retry loop that can monopolize `MAX_VIDEOS_PROCESSED_PER_CRON_RUN=1`.
+- Do not implement an unbounded retry loop that can monopolize the configured `MAX_VIDEOS_PROCESSED_PER_CRON_RUN` batch.
 - Do not run destructive SQL without a dry-run report and a narrow apply path.
 - Do not revert unrelated user/other-agent changes.
 
