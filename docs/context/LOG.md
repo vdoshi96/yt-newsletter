@@ -1,5 +1,9 @@
 # Log
 
+## 2026-05-27 Catalog Boundary and Backlog Recovery
+
+Added a durable `CATALOG_START_DATE=2026-03-01` boundary so daily views, weekly generation/archive selection, and podcast generation ignore older seeded or experimental rows. Production podcast cron keeps bounded batch support but defaults to one episode per invocation to fit the Vercel route budget while preserving local backfill batch overrides.
+
 ## 2026-05-26 Daily Ingestion Reliability Follow-Up
 
 Implemented the consensus reliability path from the model review notes: transcript waits can recover immediately when a completed `youtube_transcript_free` row exists, hourly transcript retries shift to an extended cadence instead of producing final content, transcript fetches have a configurable timeout, stale `processing` rows are bounded by the retry budget, and queue scans log candidate counts by status. Added `npm run ingest:recover` as a dry-run-first command for wedged transcript rows and moved weekly generation fully behind the dedicated weekly cron so daily discovery/processing budgets stay focused on daily availability.

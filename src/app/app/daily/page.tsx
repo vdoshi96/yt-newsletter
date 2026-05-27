@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CalendarDays, RotateCcw } from "lucide-react";
 import { DigestRenderer } from "@/components/digest-renderer";
 import { requireUser } from "@/lib/auth/current-user";
+import { getCatalogStartDate } from "@/lib/catalog";
 import { getCreatorsForUser } from "@/lib/creators";
 import { dailyDigestSchema } from "@/lib/digests/schemas";
 import { getDailyVideoPickerState, selectDailyDigestForDate } from "@/lib/digests/selection";
@@ -177,6 +178,7 @@ function EmptyPage({ title, href, action }: { title: string; href: string; actio
 
 async function getDailyDigests(userId: string, creatorId: string) {
   const sql = getSql();
+  const catalogStartDate = getCatalogStartDate();
   return sql<DailyRow[]>`
     select
       daily_digests.id,
@@ -196,6 +198,7 @@ async function getDailyDigests(userId: string, creatorId: string) {
     join user_creators on user_creators.creator_id = daily_digests.creator_id
     where user_creators.user_id = ${userId}
       and daily_digests.creator_id = ${creatorId}
+      and daily_digests.digest_date >= ${catalogStartDate}::date
       and coalesce(videos.duration_seconds, 0) >= ${MAIN_VIDEO_MIN_SECONDS}
       and lower(coalesce(videos.title, '')) not like '%#shorts%'
       and lower(coalesce(videos.title, '')) not like '% #short %'

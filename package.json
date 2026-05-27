@@ -19,6 +19,8 @@
     "backfill:grounded": "tsx scripts/backfill-grounded-catalog.ts",
     "daily:regenerate": "tsx scripts/regenerate-daily-digest.ts",
     "daily:refresh-follow-ups": "tsx scripts/refresh-daily-follow-ups.ts",
+    "catalog:audit": "tsx scripts/audit-catalog-backlog.ts",
+    "weekly:recover-catalog": "tsx scripts/recover-catalog-weeklies.ts",
     "weekly:refresh-research": "tsx scripts/refresh-weekly-research.ts",
     "podcasts:generate": "tsx scripts/generate-weekly-podcasts.ts",
     "voice:sampler": "tsx scripts/voice-sampler-server.ts"

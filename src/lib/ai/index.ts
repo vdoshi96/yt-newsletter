@@ -8,7 +8,7 @@ import { callChatProvider } from "@/lib/ai/providers";
 import { parseJsonFromModel } from "@/lib/ai/json";
 import { logModelUsage } from "@/lib/ai/usage";
 import type { AiProvider, ChatMessage } from "@/lib/ai/types";
-import { numberEnv } from "@/lib/config";
+import { booleanEnv, numberEnv } from "@/lib/config";
 import {
   assertDailyDigestGrounding,
   buildDailyDigestMessages,
@@ -113,7 +113,7 @@ export async function generateWeeklyDigestPayload(input: {
     {
       role: "system",
       content:
-        "You are a careful weekly newsletter editor. Return strict JSON only and mark uncertainty.",
+        "You are a careful weekly newsletter editor. Return strict JSON only, mark uncertainty, and use only source labels and dates that appear in the supplied transcript-grounded daily digests. Do not add external research notes or outside sources.",
     },
     {
       role: "user",
@@ -179,8 +179,12 @@ export async function generateWeeklyDigestPayload(input: {
     }
   }
 
+  if (!booleanEnv("ALLOW_WEEKLY_DIGEST_FALLBACK", false)) {
+    throw new Error(`Weekly digest generation failed for all providers: ${failures.join(" | ")}`);
+  }
+
   console.warn(
-    `Weekly digest provider route exhausted; using deterministic source-backed fallback. failures=${failures.join(" | ")}`,
+    `Weekly digest provider route exhausted; using deterministic source-backed fallback because ALLOW_WEEKLY_DIGEST_FALLBACK is enabled. failures=${failures.join(" | ")}`,
   );
   return buildSourceBackedWeeklyFallback({
     weekStart: input.weekStart,

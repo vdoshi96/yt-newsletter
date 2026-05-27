@@ -1,5 +1,6 @@
 import { generateWeeklyDigestPayload } from "@/lib/ai";
 import { getPastMonthBaselineWindow, type BaselineWeekWindow } from "@/lib/baseline/month";
+import { getCatalogStartDate } from "@/lib/catalog";
 import { getSql } from "@/lib/db";
 import { minimumTranscriptCharacters } from "@/lib/digests/grounding";
 import { loadPrompt } from "@/lib/prompts";
@@ -40,6 +41,7 @@ async function ensureBaselineWeekDigest(
 ) {
   const sql = getSql();
   const minTranscriptCharacters = minimumTranscriptCharacters();
+  const catalogStartDate = getCatalogStartDate();
   const existing = await sql<Array<{ id: string; full_digest_json: unknown }>>`
     select id, full_digest_json
     from weekly_digests
@@ -63,6 +65,7 @@ async function ensureBaselineWeekDigest(
     from daily_digests
     where creator_id = ${creatorId}
       and digest_date between ${window.weekStart} and ${window.weekEnd}
+      and digest_date >= ${catalogStartDate}::date
       and grounding_status = 'grounded'
       and transcript_source = 'youtube_transcript_free'
       and coalesce(transcript_length, 0) >= ${minTranscriptCharacters}

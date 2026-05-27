@@ -1,6 +1,7 @@
 import { CalendarDays, Headphones, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/current-user";
+import { getCatalogFirstWeeklyStart } from "@/lib/catalog";
 import { getCreatorsForUser } from "@/lib/creators";
 import { getSql } from "@/lib/db";
 import { resolveSelectedWeekStart } from "@/lib/weekly/navigation";
@@ -179,6 +180,7 @@ function EmptyPodcast({ title }: { title: string }) {
 
 async function getPodcasts(userId: string, creatorId: string) {
   const sql = getSql();
+  const firstWeeklyStart = getCatalogFirstWeeklyStart();
   return sql<PodcastRow[]>`
     select
       weekly_digests.id,
@@ -199,6 +201,7 @@ async function getPodcasts(userId: string, creatorId: string) {
     left join assets on assets.id = weekly_digests.podcast_audio_asset_id
     where user_creators.user_id = ${userId}
       and weekly_digests.creator_id = ${creatorId}
+      and weekly_digests.week_start >= ${firstWeeklyStart}::date
       and weekly_digests.grounding_status = 'grounded'
       and weekly_digests.processing_status = 'digest_generated'
       and coalesce(weekly_digests.source_digest_count, 0) > 0

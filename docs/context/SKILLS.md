@@ -14,7 +14,7 @@ For the live starter baseline, run:
 npm run seed:baseline -- --process
 ```
 
-This queues Nate B. Jones main uploads from the four most recent completed Saturday-through-Friday weeks and confirms the first four weekly editions. The weekly archive is not capped at four; completed Saturday-through-Friday weeks remain stored. The baseline fetches deeper than 50 uploads and excludes Shorts-style or very short clips by default.
+This queues Nate B. Jones main uploads from the four most recent completed Saturday-through-Friday weeks. The live catalog boundary is `CATALOG_START_DATE=2026-03-01`; older seeded or experimental rows should not drive the daily, weekly, or podcast archive. The weekly archive is not capped at four; completed Saturday-through-Friday catalog weeks remain stored. The baseline fetches deeper than 50 uploads and excludes Shorts-style or very short clips by default.
 
 ## Ingestion
 
@@ -39,11 +39,15 @@ Run `npm run ingest:recover` to inspect wedged transcript rows. It defaults to a
 
 Run `npm run backfill:grounded -- --force` to re-discover configured creator back catalogs, queue transcript-grounded reprocessing, regenerate daily digests from verified transcript text, and refresh affected weekly digests. Add `--since=YYYY-MM-DD --until=YYYY-MM-DD` for a bounded production run, and use `--dry-run` before a large run.
 
+Run `npm run catalog:audit -- --strict` to verify the March 1, 2026 catalog has no missing grounded daily rows, missing/weak completed weekly rows, or missing QA-passed podcasts. Run `npm run weekly:recover-catalog` to regenerate missing or weak catalog weekly rows with bounded concurrency; use `--dry-run`, `--week=YYYY-MM-DD`, `--limit=N`, or `--force-weak=false` to scope the recovery.
+
+Keep `ALLOW_WEEKLY_DIGEST_FALLBACK=false` for production/catalog recovery. If a weekly provider route exhausts, retry the targeted week rather than allowing `local:fallback` to publish.
+
 Run `npm run weekly:refresh-research` to refresh the starter weekly archive with the curated date-scoped research notes used for the baseline "This Week in AI" editions.
 
-Run `npm run podcasts:generate` to generate up to four Sunday-ready weekly podcast MP3s with the rotating two-host Gemini Flash path. Provider-authored scripts default to DeepSeek V4 Pro; Maya/Theo and Nina/Jonah are the user-facing host casts. Use `--force`, `--limit=N`, `--week=YYYY-MM-DD`, or `--concurrency=N` for backfills.
+Run `npm run podcasts:generate` to generate ready catalog weekly podcast audio with the rotating two-host Gemini Flash path. Provider-authored scripts default to DeepSeek V4 Pro; Maya/Theo and Nina/Jonah are the user-facing host casts. Use `--force`, `--limit=N`, `--week=YYYY-MM-DD`, or `--concurrency=N` for backfills.
 
-Production podcast audio retries through `/api/cron/generate-weekly-podcast` and `PODCASTS_PER_CRON_RUN` (default `2`). Keep `PODCAST_GENERATION_CONCURRENCY=1` for provider rate-limit safety unless the TTS quota is explicitly raised. This path stores WAV audio and does not rely on local `ffmpeg`.
+Production podcast audio retries through `/api/cron/generate-weekly-podcast` and `PODCASTS_PER_CRON_RUN` (default `1` to stay within the 800-second function budget). Keep `PODCAST_GENERATION_CONCURRENCY=1` for provider rate-limit safety unless the TTS quota is explicitly raised. This path stores WAV audio and does not rely on local `ffmpeg`.
 
 ## Verification
 
