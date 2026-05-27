@@ -3,7 +3,9 @@ import { weeklyDigestSchema } from "../src/lib/digests/schemas";
 import {
   buildTwoHostPodcastLines,
   formatTwoHostPodcastScript,
+  getPodcastCastForWeek,
 } from "../src/lib/podcasts/two-host";
+import { resolvePodcastScript } from "../src/lib/podcasts/script-quality";
 
 describe("weekly podcast script depth", () => {
   it("builds a structured long-form conversation instead of a short skim", () => {
@@ -118,5 +120,48 @@ describe("weekly podcast script depth", () => {
     expect(script).not.toContain("Market memo:");
     expect(script).not.toContain("Research desk:");
     expect(script.split(/\s+/).filter(Boolean).length).toBeGreaterThan(4000);
+  });
+
+  it("replaces short stored or provider scripts with a long-form deterministic fallback", () => {
+    const digest = weeklyDigestSchema.parse({
+      title: "Week of grounded AI operating practice",
+      newsletter_markdown:
+        "# Grounded AI practice\n\nThe week focused on checking AI claims against transcript-backed examples before turning them into workflows.",
+      what_changed:
+        "Teams were pushed to treat AI as an operational system that needs evidence, review, cost tracking, and rollback plans.",
+      what_to_do_next: [
+        "Pick one recurring task and write down the evidence that would prove AI helped.",
+        "Keep a reviewer in the loop until failure cases are visible.",
+      ],
+      free_learning_plan: [
+        "Read one official guide and build a tiny scored example.",
+      ],
+      weekly_grounding: {
+        grounded: true,
+        source: "daily_digests",
+        source_digest_count: 2,
+        source_date_range: { start: "2026-05-16", end: "2026-05-22" },
+      },
+    });
+    const cast = getPodcastCastForWeek("2026-05-16");
+    const config = {
+      targetMinutes: 30,
+      wordsPerMinute: 145,
+      generationMode: "provider_script" as const,
+    };
+
+    const resolved = resolvePodcastScript({
+      candidateScript: "Maya: Quick recap.\n\nTheo: Done.",
+      candidateSource: "provider",
+      digest,
+      config,
+      cast,
+    });
+
+    expect(resolved.source).toBe("deterministic_fallback");
+    expect(resolved.replacedShortScript).toBe(true);
+    expect(resolved.originalWordCount).toBeLessThan(resolved.minimumWordCount);
+    expect(resolved.wordCount).toBeGreaterThanOrEqual(resolved.minimumWordCount);
+    expect(resolved.script).toContain("source contract");
   });
 });

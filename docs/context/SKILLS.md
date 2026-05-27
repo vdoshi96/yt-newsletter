@@ -23,9 +23,9 @@ Queue ingestion from `/app/creators`, then process with `/app/settings` or `npm 
 Production discovery and processing are split:
 
 - `/api/cron/check-creators` runs hourly and queues missing daily work for newly discovered or previously missed videos.
-- `/api/cron/process-ingest` runs every five minutes and processes queued videos. It does not generate weekly digests inline.
-- `/api/cron/generate-weekly-digest` runs on Saturday and publishes completed Saturday-through-Friday weekly digests.
-- `/api/cron/generate-weekly-podcast` runs daily and retries one ready weekly podcast whose audio is missing or failed.
+- `/api/cron/process-ingest` runs every five minutes and processes queued videos. It does not generate weekly digests inline. When `MAX_VIDEOS_PROCESSED_PER_CRON_RUN` is above one, `INGEST_PROCESS_CONCURRENCY` controls the bounded worker pool used for daily generation.
+- `/api/cron/generate-weekly-digest` runs on Saturday and publishes completed Saturday-through-Friday weekly digests. `WEEKLY_DIGEST_CONCURRENCY` controls bounded parallel weekly synthesis during backfills or multi-week refreshes.
+- `/api/cron/generate-weekly-podcast` runs daily and retries ready weekly podcasts whose audio is missing or failed. `PODCASTS_PER_CRON_RUN` controls batch size and `PODCAST_GENERATION_CONCURRENCY` controls bounded audio/script generation concurrency.
 - `/app/settings` -> `Refresh and run now` runs discovery plus processing for admin/local verification.
 - `POST /api/admin/run-ingest-now` with `CRON_SECRET` also runs discovery plus processing by default; pass `?discover=0` to process only.
 
@@ -41,9 +41,9 @@ Run `npm run backfill:grounded -- --force` to re-discover configured creator bac
 
 Run `npm run weekly:refresh-research` to refresh the starter weekly archive with the curated date-scoped research notes used for the baseline "This Week in AI" editions.
 
-Run `npm run podcasts:generate` to generate up to four Sunday-ready weekly podcast MP3s with the rotating two-host Gemini Flash path. Provider-authored scripts default to DeepSeek V4 Pro; Maya/Theo and Nina/Jonah are the user-facing host casts. Use `--force`, `--limit=N`, or `--week=YYYY-MM-DD` for backfills.
+Run `npm run podcasts:generate` to generate up to four Sunday-ready weekly podcast MP3s with the rotating two-host Gemini Flash path. Provider-authored scripts default to DeepSeek V4 Pro; Maya/Theo and Nina/Jonah are the user-facing host casts. Use `--force`, `--limit=N`, `--week=YYYY-MM-DD`, or `--concurrency=N` for backfills.
 
-Production podcast audio retries through `/api/cron/generate-weekly-podcast` and `PODCASTS_PER_CRON_RUN` (default `1`). This path stores WAV audio and does not rely on local `ffmpeg`.
+Production podcast audio retries through `/api/cron/generate-weekly-podcast` and `PODCASTS_PER_CRON_RUN` (default `2`). Keep `PODCAST_GENERATION_CONCURRENCY=1` for provider rate-limit safety unless the TTS quota is explicitly raised. This path stores WAV audio and does not rely on local `ffmpeg`.
 
 ## Verification
 

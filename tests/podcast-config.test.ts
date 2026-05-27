@@ -17,7 +17,7 @@ describe("podcast audio config", () => {
 
     expect(getPodcastAudioConfig()).toMatchObject({
       provider: "gemini_flash",
-      ttsModel: "gemini-3.1-flash-tts-preview",
+      ttsModel: "gemini-2.5-flash-preview-tts",
       geminiChunkMaxCharacters: 4800,
       geminiLineMaxCharacters: 1800,
     });

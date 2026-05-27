@@ -56,7 +56,7 @@ Transcript retry configuration:
 - `TRANSCRIPT_MAX_RETRY_ATTEMPTS` controls how many hourly transcript-missing attempts run before the item switches to extended retries. Default: `48`.
 - `TRANSCRIPT_EXTENDED_RETRY_SECONDS` controls the slower retry cadence after that hourly budget is used. Default: `86400` (one day). Missing transcripts stay blocked and retryable instead of becoming terminally failed.
 - `TRANSCRIPT_FETCH_TIMEOUT_MS` bounds each free transcript fetch. Default: `45000`.
-- `MAX_VIDEOS_PROCESSED_PER_CRON_RUN` should stay at `1` for cron reliability; provider fallback can take long enough that multi-item HTTP runs risk hitting the route `maxDuration`.
+- `MAX_VIDEOS_PROCESSED_PER_CRON_RUN` defaults to `4`; `INGEST_PROCESS_CONCURRENCY` defaults to `2` so recovery can drain more than one daily digest per cron run without launching an unbounded provider fan-out.
 - `AI_PROVIDER_TIMEOUT_MS` controls provider request timeout for non-DeepSeek routes. Default: `300000`.
 - `DEEPSEEK_PROVIDER_TIMEOUT_MS` controls DeepSeek request timeout. Default: `600000` so V4 Pro can spend up to ten minutes on higher-quality daily, weekly, and podcast text output. Routes that run DeepSeek generation use longer `maxDuration` values than the provider timeout.
 - `DAILY_AI_MAX_OUTPUT_TOKENS` is optional. Leave it unset so the app does not impose an extra daily output cap beyond provider/model limits.
@@ -104,7 +104,7 @@ Configuration:
 - `PODCAST_SCRIPT_WORDS_PER_MINUTE` controls word target math. Default: `145`.
 - `PODCAST_GENERATION_MODE` defaults to `provider_script`.
 - `PODCAST_TTS_PROVIDER` defaults to `gemini_flash`.
-- `GEMINI_TTS_MODEL` or `PODCAST_TTS_MODEL` selects the Gemini Flash TTS model. Default: `gemini-3.1-flash-tts-preview`.
+- `GEMINI_TTS_MODEL` or `PODCAST_TTS_MODEL` selects the Gemini Flash TTS model. Default: `gemini-2.5-flash-preview-tts`.
 - `GEMINI_TTS_CHUNK_MAX_CHARACTERS` controls Gemini multi-speaker TTS chunk size. Default: `4800`, which reduces quota burn while still splitting long scripts for audio consistency.
 - `GEMINI_TTS_LINE_MAX_CHARACTERS` controls the maximum single host line size before sentence splitting. Default: `1800`.
 - Gemini host casts rotate by week between Maya/Theo (`Puck` + `Kore`) and Nina/Jonah (`Achird` + `Sulafat`).
@@ -113,7 +113,7 @@ Configuration:
 
 `npm run podcasts:generate` is the preferred high-quality audio path because it uses Gemini Flash native multi-speaker TTS by default and stores an MP3 in Supabase. By default it selects up to four Sunday-ready weekly podcasts; use `--limit=N`, `--week=YYYY-MM-DD`, `--force`, or `--include-not-ready` when backfilling. Podcast metadata stores provider, model, cast/voice config, target minutes, word count, source references, audio QA, generation status, and failures internally. Listener-facing pages hide those operational details.
 
-Production also has `/api/cron/generate-weekly-podcast`, which retries ready weekly podcast audio one at a time (`PODCASTS_PER_CRON_RUN`, default `1`). The cron path uses Gemini Flash and uploads WAV audio directly so it does not depend on local `ffmpeg`; failed rows stay retryable and are picked up by the next daily run.
+Production also has `/api/cron/generate-weekly-podcast`, which retries ready weekly podcast audio in small batches (`PODCASTS_PER_CRON_RUN`, default `2`) while keeping audio generation serial by default (`PODCAST_GENERATION_CONCURRENCY=1`) for TTS rate-limit safety. The cron path uses Gemini Flash and uploads WAV audio directly so it does not depend on local `ffmpeg`; failed rows stay retryable and are picked up by the next daily run.
 
 NotebookLM currently has no stable app API for automated generation from this app. Treat NotebookLM as a manual external production option; the automated path here is the best feasible stack-native alternative.
 

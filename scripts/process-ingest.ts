@@ -4,7 +4,9 @@ import { processIngestQueue } from "@/lib/processor";
 
 async function main() {
   const result = await processIngestQueue();
-  console.log(`Processed ${result.processed} queued item(s). Limit: ${result.limit}.`);
+  console.log(
+    `Processed ${result.processed} queued item(s). Limit: ${result.limit}. Concurrency: ${result.concurrency}.`,
+  );
 }
 
 main()
