@@ -1,4 +1,7 @@
-import { minimumTranscriptCharacters } from "../digests/grounding";
+import {
+  isVerifiedTranscriptSource,
+  minimumTranscriptCharacters,
+} from "../digests/grounding";
 import type { ProcessingStatus } from "../ingest/status";
 
 export type BackfillCatalogVideo = {
@@ -83,12 +86,15 @@ export function resolveDailyBackfillDecision(input: {
   minTranscriptCharacters?: number;
 }): DailyBackfillDecision {
   const minTranscriptCharacters = input.minTranscriptCharacters ?? minimumTranscriptCharacters();
+  const transcriptSource = input.grounding?.transcriptSource;
+  const transcriptLength = input.grounding?.transcriptLength ?? 0;
+  const generationModel = input.grounding?.generationModel;
   if (
     input.hasDailyDigest &&
     !input.forceRegenerate &&
-    input.grounding?.transcriptSource === "youtube_transcript_free" &&
-    (input.grounding.transcriptLength ?? 0) >= minTranscriptCharacters &&
-    Boolean(input.grounding.generationModel)
+    Boolean(transcriptSource && isVerifiedTranscriptSource(transcriptSource)) &&
+    transcriptLength >= minTranscriptCharacters &&
+    Boolean(generationModel)
   ) {
     return {
       action: "skip",

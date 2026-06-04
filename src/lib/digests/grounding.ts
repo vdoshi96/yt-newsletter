@@ -1,8 +1,15 @@
 import type { ChatMessage } from "@/lib/ai/types";
 
-export const VERIFIED_TRANSCRIPT_SOURCES = ["youtube_transcript_free"] as const;
+export const VERIFIED_TRANSCRIPT_SOURCES = [
+  "youtube_transcript_free",
+  "transcriptapi_com",
+] as const;
 
 export type VerifiedTranscriptSource = (typeof VERIFIED_TRANSCRIPT_SOURCES)[number];
+
+export function isVerifiedTranscriptSource(source: string): source is VerifiedTranscriptSource {
+  return VERIFIED_TRANSCRIPT_SOURCES.includes(source as VerifiedTranscriptSource);
+}
 
 export type TranscriptSegment = {
   offset: number;
@@ -246,10 +253,6 @@ export function looksLikePlaceholderTranscript(text: string) {
     .trim();
   const letters = withoutNoise.match(/[a-z]/gi)?.length ?? 0;
   return letters < 80;
-}
-
-function isVerifiedTranscriptSource(source: string): source is VerifiedTranscriptSource {
-  return VERIFIED_TRANSCRIPT_SOURCES.includes(source as VerifiedTranscriptSource);
 }
 
 function normalizeTranscriptSegments(

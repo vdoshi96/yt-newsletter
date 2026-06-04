@@ -4,6 +4,7 @@ import { generateDailyDigestPayload } from "@/lib/ai";
 import { closeSql, getSql } from "@/lib/db";
 import { buildDailyFollowUp, type DailyFollowUpDigest } from "@/lib/digests/follow-up";
 import {
+  VERIFIED_TRANSCRIPT_SOURCES,
   validateTranscriptForDailyDigest,
   type DailyDigestTranscriptRecord,
 } from "@/lib/digests/grounding";
@@ -84,7 +85,7 @@ async function main() {
         update transcripts
         set status = 'failed', needs_retry = false, retry_after = null, processing_status = 'failed', updated_at = now()
         where video_id = ${row.video_id}
-          and source <> 'youtube_transcript_free'
+          and source <> all(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
           and status = 'completed'
       `;
       await transaction`
@@ -166,10 +167,10 @@ async function ensureVerifiedTranscript(row: DigestRow) {
       updated_at::text
     from transcripts
     where video_id = ${row.video_id}
-      and source = 'youtube_transcript_free'
+      and source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
       and status = 'completed'
       and transcript_text is not null
-    order by created_at desc
+    order by case when source = 'youtube_transcript_free' then 0 else 1 end, created_at desc
     limit 1
   `;
   if (existing[0]) {

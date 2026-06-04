@@ -63,6 +63,17 @@ describe("ingestion idempotency SQL safeguards", () => {
     expect(processor).toContain("queue-scan-candidates");
   });
 
+  it("keeps the scraper first and gates managed transcript fallback by scraper miss age", () => {
+    const processor = readFileSync(join(process.cwd(), "src/lib/processor.ts"), "utf8");
+    const transcripts = readFileSync(join(process.cwd(), "src/lib/youtube/transcripts.ts"), "utf8");
+
+    expect(processor).toContain("TRANSCRIPT_API_FALLBACK_AFTER_HOURS");
+    expect(processor).toContain("shouldUseManagedTranscriptFallback");
+    expect(processor).toContain("scraper_missing_since");
+    expect(transcripts).toContain("allowManagedFallback");
+    expect(transcripts).toContain("fetchTranscriptApiTranscript");
+  });
+
   it("ships a dry-run-first recovery command for wedged transcript rows", () => {
     const packageJson = readFileSync(join(process.cwd(), "package.json"), "utf8");
     const script = readFileSync(join(process.cwd(), "scripts/recover-ingest-transcripts.ts"), "utf8");

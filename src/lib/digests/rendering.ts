@@ -1,4 +1,4 @@
-import { minimumTranscriptCharacters } from "./grounding";
+import { isVerifiedTranscriptSource, minimumTranscriptCharacters } from "./grounding";
 
 export type DailyDigestRenderRow = {
   grounding_status?: string | null;
@@ -32,7 +32,7 @@ export function isGroundedDailyDigestRow(
     row.generated_at ?? readString(jsonGrounding?.generation_timestamp);
 
   return (
-    transcriptSource === "youtube_transcript_free" &&
+    Boolean(transcriptSource && isVerifiedTranscriptSource(transcriptSource)) &&
     transcriptLength >= minTranscriptCharacters &&
     Boolean(generationModel) &&
     Boolean(generatedAt) &&

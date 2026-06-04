@@ -2,7 +2,10 @@ import "./load-env";
 import { closeSql, getSql } from "@/lib/db";
 import { weeklyDigestSchema } from "@/lib/digests/schemas";
 import { normalizeExplanationLevels } from "@/lib/digests/explanation-levels";
-import { minimumTranscriptCharacters } from "@/lib/digests/grounding";
+import {
+  VERIFIED_TRANSCRIPT_SOURCES,
+  minimumTranscriptCharacters,
+} from "@/lib/digests/grounding";
 import { getPodcastScriptConfig } from "@/lib/podcasts/config";
 import {
   buildTwoHostPodcastLines,
@@ -543,7 +546,7 @@ async function main() {
         where creator_id = ${week.creator_id}
           and digest_date between ${week.week_start} and ${week.week_end}
           and grounding_status = 'grounded'
-          and transcript_source = 'youtube_transcript_free'
+          and transcript_source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
           and coalesce(transcript_length, 0) >= ${minTranscriptCharacters}
         order by digest_date asc, created_at asc
       `;

@@ -1,7 +1,9 @@
+import type { VerifiedTranscriptSource } from "@/lib/digests/grounding";
+
 export type TranscriptResult =
   | {
       status: "completed";
-      source: "youtube_transcript_free";
+      source: VerifiedTranscriptSource;
       transcript_text: string;
       timed_segments: Array<{ offset: number; duration: number; text: string }>;
       derived_notes: null;
@@ -10,7 +12,7 @@ export type TranscriptResult =
     }
   | {
       status: "missing";
-      source: "youtube_transcript_free";
+      source: VerifiedTranscriptSource;
       transcript_text: null;
       timed_segments: null;
       derived_notes: null;
@@ -21,9 +23,12 @@ export type TranscriptResult =
 
 const DEFAULT_TRANSCRIPT_RETRY_MINUTES = 60;
 const DEFAULT_TRANSCRIPT_FETCH_TIMEOUT_MS = 45_000;
+const DEFAULT_TRANSCRIPT_API_BASE_URL =
+  "https://transcriptapi.com/api/v2/youtube/transcript";
 
 type TranscriptSegment = { text: string; offset: number; duration: number };
 type TranscriptFetcher = (videoId: string) => Promise<TranscriptSegment[]>;
+type TranscriptApiResponse = Record<string, unknown>;
 
 class TranscriptFetchError extends Error {
   retryable = true;
@@ -79,6 +84,35 @@ export async function fetchTranscriptWithTimeout(
   }
 }
 
+export async function fetchJsonWithTimeout<T>(
+  url: string,
+  init: RequestInit,
+  timeoutMs = transcriptFetchTimeoutMs(),
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new TranscriptFetchError(`Transcript API request failed: HTTP ${response.status}.`, "api_error");
+    }
+    return (await response.json()) as T;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new TranscriptFetchError(
+        `Transcript API request timed out after ${timeoutMs}ms.`,
+        "timeout",
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export function classifyTranscriptFetchError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   const candidate = error as Partial<TranscriptFetchError>;
@@ -101,7 +135,10 @@ export function classifyTranscriptFetchError(error: unknown) {
   };
 }
 
-export async function fetchFreeTranscript(videoId: string): Promise<TranscriptResult> {
+export async function fetchFreeTranscript(
+  videoId: string,
+  options: { allowManagedFallback?: boolean } = {},
+): Promise<TranscriptResult> {
   try {
     const mod = (await import("youtube-transcript")) as {
       YoutubeTranscript?: {
@@ -130,6 +167,10 @@ export async function fetchFreeTranscript(videoId: string): Promise<TranscriptRe
       retryable: failure.retryable,
       message: failure.message,
     });
+    if (options.allowManagedFallback) {
+      const managedTranscript = await fetchTranscriptApiTranscript(videoId);
+      if (managedTranscript.status === "completed") return managedTranscript;
+    }
     const retryAfter = new Date(Date.now() + transcriptRetryDelayMs());
     return {
       status: "missing",
@@ -142,4 +183,153 @@ export async function fetchFreeTranscript(videoId: string): Promise<TranscriptRe
       failure_reason: failure.reason,
     };
   }
+}
+
+async function fetchTranscriptApiTranscript(videoId: string): Promise<TranscriptResult> {
+  const apiKey = process.env.TRANSCRIPT_API_KEY ?? process.env.API_KEY;
+  if (!apiKey) {
+    return missingTranscript(videoId, "missing_api_key");
+  }
+
+  try {
+    const url = new URL(process.env.TRANSCRIPT_API_BASE_URL ?? DEFAULT_TRANSCRIPT_API_BASE_URL);
+    url.searchParams.set("video_url", `https://www.youtube.com/watch?v=${videoId}`);
+    url.searchParams.set("format", "json");
+    const data = await fetchJsonWithTimeout<TranscriptApiResponse>(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+    const normalized = normalizeTranscriptApiResponse(data);
+    if (!normalized.transcriptText.trim()) {
+      throw new TranscriptFetchError("Transcript API returned an empty transcript.", "not_available");
+    }
+    return {
+      status: "completed",
+      source: "transcriptapi_com",
+      transcript_text: normalized.transcriptText,
+      timed_segments: normalized.timedSegments,
+      derived_notes: null,
+      needs_retry: false,
+      retry_after: null,
+    };
+  } catch (error) {
+    const failure = classifyTranscriptFetchError(error);
+    console.warn("[ingest:managed-transcript-fetch-failed]", {
+      youtubeVideoId: videoId,
+      reason: failure.reason,
+      retryable: failure.retryable,
+      message: failure.message,
+    });
+    return missingTranscript(videoId, failure.reason);
+  }
+}
+
+function normalizeTranscriptApiResponse(data: TranscriptApiResponse) {
+  const record = readRecord(data);
+  const nested = readRecord(record.data);
+  const transcriptCandidate =
+    record.transcript ??
+    nested?.transcript ??
+    record.segments ??
+    nested?.segments ??
+    record.captions ??
+    nested?.captions;
+  const fullText =
+    readString(record.full_text) ??
+    readString(nested?.full_text) ??
+    readString(record.text) ??
+    readString(nested?.text);
+
+  if (typeof transcriptCandidate === "string") {
+    return { transcriptText: transcriptCandidate.trim(), timedSegments: [] };
+  }
+
+  if (!Array.isArray(transcriptCandidate)) {
+    return { transcriptText: fullText?.trim() ?? "", timedSegments: [] };
+  }
+
+  const segments: TranscriptSegment[] = [];
+  const lines: string[] = [];
+  for (const item of transcriptCandidate) {
+    if (typeof item === "string") {
+      const text = item.trim();
+      if (text) lines.push(text);
+      continue;
+    }
+    const itemRecord = readRecord(item);
+    const text =
+      readString(itemRecord.text) ??
+      readString(itemRecord.value) ??
+      readString(itemRecord.caption) ??
+      readString(itemRecord.transcript);
+    if (!text) continue;
+    const offset = secondsToMilliseconds(
+      readTimestamp(itemRecord.offset) ??
+        readTimestamp(itemRecord.start) ??
+        readTimestamp(itemRecord.start_time) ??
+        readTimestamp(itemRecord.startTime) ??
+        0,
+    );
+    const duration = secondsToMilliseconds(
+      readTimestamp(itemRecord.duration) ??
+        durationFromStartEnd(itemRecord.start, itemRecord.end) ??
+        durationFromStartEnd(itemRecord.startTime, itemRecord.endTime) ??
+        0,
+    );
+    lines.push(text);
+    segments.push({ text, offset, duration });
+  }
+
+  return {
+    transcriptText: fullText?.trim() || lines.join("\n"),
+    timedSegments: segments,
+  };
+}
+
+function missingTranscript(videoId: string, failureReason?: string): TranscriptResult {
+  const retryAfter = new Date(Date.now() + transcriptRetryDelayMs());
+  return {
+    status: "missing",
+    source: "youtube_transcript_free",
+    transcript_text: null,
+    timed_segments: null,
+    derived_notes: null,
+    needs_retry: true,
+    retry_after: retryAfter.toISOString(),
+    failure_reason: failureReason,
+  };
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readTimestamp(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric)) return numeric;
+  const parts = trimmed.split(":").map(Number);
+  if (parts.some((part) => !Number.isFinite(part))) return null;
+  return parts.reduce((total, part) => total * 60 + part, 0);
+}
+
+function durationFromStartEnd(start: unknown, end: unknown) {
+  const startSeconds = readTimestamp(start);
+  const endSeconds = readTimestamp(end);
+  if (startSeconds === null || endSeconds === null || endSeconds <= startSeconds) return null;
+  return endSeconds - startSeconds;
+}
+
+function secondsToMilliseconds(seconds: number) {
+  return Math.max(0, Math.round(seconds * 1000));
 }

@@ -33,7 +33,7 @@ Run `npm run daily:refresh-follow-ups` to rebuild stored daily follow-up text fr
 
 Run `npm run daily:regenerate -- --date=YYYY-MM-DD` to safely regenerate stored daily digests after verifying/fetching transcript text. This command fails closed if transcript grounding checks do not pass.
 
-Missing transcripts stay retryable: the hourly retry budget is controlled by `TRANSCRIPT_MAX_RETRY_ATTEMPTS`, then retries continue on the slower `TRANSCRIPT_EXTENDED_RETRY_SECONDS` cadence instead of permanently failing the item. Transcript fetches are bounded by `TRANSCRIPT_FETCH_TIMEOUT_MS` so a hung YouTube transcript request cannot consume the whole Vercel route budget.
+Missing transcripts stay retryable: the hourly retry budget is controlled by `TRANSCRIPT_MAX_RETRY_ATTEMPTS`, then retries continue on the slower `TRANSCRIPT_EXTENDED_RETRY_SECONDS` cadence instead of permanently failing the item. Transcript fetches are bounded by `TRANSCRIPT_FETCH_TIMEOUT_MS` so a hung YouTube transcript request cannot consume the whole Vercel route budget. The scraper remains the default; if `TRANSCRIPT_API_KEY` is set, queue processing may use TranscriptAPI after the first scraper miss is older than `TRANSCRIPT_API_FALLBACK_AFTER_HOURS` hours, default `2`.
 
 Run `npm run ingest:recover` to inspect wedged transcript rows. It defaults to a dry run and reports `waitingWithCompletedTranscript`, `terminalFailedWithCompletedTranscript`, `terminalFailedFetchableTranscript`, and `nonGroundedDailyRows`. Add `--fetch` to test terminal failed rows with a live transcript fetch during dry run, and add `--apply` only after reviewing the targeted reset set.
 

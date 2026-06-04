@@ -42,7 +42,7 @@ The command skips already grounded daily digests unless `--force` is passed. It 
 Daily digests must never be generated from title-only, metadata-only, stale placeholder, or model-derived video notes. The hard gate before LLM generation requires:
 
 - a transcript row tied to the exact `video_id`;
-- `source = youtube_transcript_free`;
+- `source = youtube_transcript_free` or `source = transcriptapi_com`;
 - `status = completed`;
 - non-placeholder transcript text;
 - transcript length of at least `DAILY_DIGEST_MIN_TRANSCRIPT_CHARS` characters, default `1200`;
@@ -55,7 +55,9 @@ Transcript retry configuration:
 - `TRANSCRIPT_RETRY_MINUTES` controls how soon a missing transcript is retried. Default: `60`.
 - `TRANSCRIPT_MAX_RETRY_ATTEMPTS` controls how many hourly transcript-missing attempts run before the item switches to extended retries. Default: `48`.
 - `TRANSCRIPT_EXTENDED_RETRY_SECONDS` controls the slower retry cadence after that hourly budget is used. Default: `86400` (one day). Missing transcripts stay blocked and retryable instead of becoming terminally failed.
-- `TRANSCRIPT_FETCH_TIMEOUT_MS` bounds each free transcript fetch. Default: `45000`.
+- `TRANSCRIPT_FETCH_TIMEOUT_MS` bounds each transcript fetch. Default: `45000`.
+- `TRANSCRIPT_API_KEY` enables the managed TranscriptAPI fallback. The scraper still runs first.
+- `TRANSCRIPT_API_FALLBACK_AFTER_HOURS` controls how old the first scraper miss must be before queue processing tries TranscriptAPI. Default: `2`.
 - `MAX_VIDEOS_PROCESSED_PER_CRON_RUN` defaults to `4`; `INGEST_PROCESS_CONCURRENCY` defaults to `2` so recovery can drain more than one daily digest per cron run without launching an unbounded provider fan-out.
 - `AI_PROVIDER_TIMEOUT_MS` controls provider request timeout for non-DeepSeek routes. Default: `300000`.
 - `DEEPSEEK_PROVIDER_TIMEOUT_MS` controls DeepSeek request timeout. Default: `600000` so V4 Pro can spend up to ten minutes on higher-quality daily, weekly, and podcast text output. Routes that run DeepSeek generation use longer `maxDuration` values than the provider timeout.

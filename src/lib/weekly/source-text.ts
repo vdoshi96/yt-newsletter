@@ -2,6 +2,7 @@ import {
   normalizeExplanationLevels,
   type ExplanationLevels,
 } from "../digests/explanation-levels";
+import { VERIFIED_TRANSCRIPT_SOURCES } from "../digests/grounding";
 
 export type WeeklySourceDigest = {
   video_id?: string | null;
@@ -93,7 +94,10 @@ export function assertWeeklyDigestGrounding(input: {
   if (!sourceDates.size) {
     throw new Error("Weekly digest grounding failed: no grounded daily source dates were supplied.");
   }
-  if (!input.sourceText.includes("Transcript source: youtube_transcript_free")) {
+  const hasVerifiedTranscriptSource = VERIFIED_TRANSCRIPT_SOURCES.some((source) =>
+    input.sourceText.includes(`Transcript source: ${source}`),
+  );
+  if (!hasVerifiedTranscriptSource) {
     throw new Error("Weekly digest grounding failed: daily transcript grounding metadata is missing.");
   }
 

@@ -99,6 +99,20 @@ describe("daily digest transcript grounding", () => {
     expect(userContent).not.toContain("You're Wasting 40% Of Your AI Time");
   });
 
+  it("allows managed TranscriptAPI text as verified transcript source", () => {
+    const verified = validateTranscriptForDailyDigest({
+      expectedVideoId: "video-1",
+      minTranscriptCharacters: 100,
+      transcript: {
+        ...validTranscript,
+        source: "transcriptapi_com",
+      },
+    });
+
+    expect(verified.source).toBe("transcriptapi_com");
+    expect(verified.transcript_character_count).toBe(transcriptText.length);
+  });
+
   it("normalizes stored JSON transcript segments before building anchors", () => {
     const messages = buildDailyDigestMessages({
       prompt: "Return strict JSON.",
