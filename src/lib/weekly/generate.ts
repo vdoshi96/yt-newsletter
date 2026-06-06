@@ -3,7 +3,10 @@ import { getCatalogStartDate } from "@/lib/catalog";
 import { booleanEnv, numberEnv } from "@/lib/config";
 import { normalizeConcurrency, runBoundedConcurrency } from "@/lib/concurrency";
 import { getSql } from "@/lib/db";
-import { minimumTranscriptCharacters } from "@/lib/digests/grounding";
+import {
+  VERIFIED_TRANSCRIPT_SOURCES,
+  minimumTranscriptCharacters,
+} from "@/lib/digests/grounding";
 import { loadPrompt } from "@/lib/prompts";
 import { getPodcastCastForWeek } from "@/lib/podcasts/two-host";
 import { resolvePodcastScript } from "@/lib/podcasts/script-quality";
@@ -53,7 +56,7 @@ export async function ensureCompletedWeeklyDigestsForCreator(input: {
     where daily_digests.creator_id = ${input.creatorId}
       and daily_digests.grounding_status = 'grounded'
       and daily_digests.digest_date >= ${catalogStartDate}::date
-      and daily_digests.transcript_source = 'youtube_transcript_free'
+      and daily_digests.transcript_source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
       and coalesce(daily_digests.transcript_length, 0) >= ${minTranscriptCharacters}
       and coalesce(videos.duration_seconds, 0) >= 300
       and lower(coalesce(videos.title, '')) not like '%#shorts%'
@@ -130,7 +133,7 @@ export async function ensureWeeklyDigestForRange(input: {
       and daily_digests.digest_date between ${weekStart} and ${weekEnd}
       and daily_digests.digest_date >= ${catalogStartDate}::date
       and daily_digests.grounding_status = 'grounded'
-      and daily_digests.transcript_source = 'youtube_transcript_free'
+      and daily_digests.transcript_source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
       and coalesce(daily_digests.transcript_length, 0) >= ${minTranscriptCharacters}
       and coalesce(videos.duration_seconds, 0) >= 300
       and lower(coalesce(videos.title, '')) not like '%#shorts%'

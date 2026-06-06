@@ -1,5 +1,6 @@
 import type { DailyDigestPayload } from "@/lib/digests/schemas";
 import { ExplanationLevelPanel } from "@/components/explanation-level-panel";
+import { isVerifiedTranscriptSource } from "@/lib/digests/grounding";
 
 export function DigestRenderer({ digest }: { digest: DailyDigestPayload }) {
   return (
@@ -128,7 +129,7 @@ function ConceptsToLearn({ digest }: { digest: DailyDigestPayload }) {
 function TranscriptGrounding({ digest }: { digest: DailyDigestPayload }) {
   const grounding = digest.transcript_grounding;
   const isGrounded =
-    grounding.transcript_source === "youtube_transcript_free" &&
+    isVerifiedTranscriptSource(grounding.transcript_source) &&
     grounding.transcript_length > 0 &&
     grounding.generation_timestamp !== "unknown";
 

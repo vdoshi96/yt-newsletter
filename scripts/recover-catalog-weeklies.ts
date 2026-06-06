@@ -1,7 +1,10 @@
 import "./load-env";
 import { closeSql, getSql } from "@/lib/db";
 import { getCatalogFirstWeeklyStart, getCatalogStartDate } from "@/lib/catalog";
-import { minimumTranscriptCharacters } from "@/lib/digests/grounding";
+import {
+  VERIFIED_TRANSCRIPT_SOURCES,
+  minimumTranscriptCharacters,
+} from "@/lib/digests/grounding";
 import { normalizeConcurrency, runBoundedConcurrency } from "@/lib/concurrency";
 import { numberEnv } from "@/lib/config";
 import { ensureWeeklyDigestForRange } from "@/lib/weekly/generate";
@@ -47,7 +50,7 @@ async function main() {
       where daily_digests.creator_id = ${creator.id}
         and daily_digests.digest_date >= ${catalogStart}::date
         and daily_digests.grounding_status = 'grounded'
-        and daily_digests.transcript_source = 'youtube_transcript_free'
+        and daily_digests.transcript_source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
         and coalesce(daily_digests.transcript_length, 0) >= ${minTranscriptCharacters}
         and coalesce(videos.duration_seconds, 0) >= 300
         and lower(coalesce(videos.title, '')) not like '%#shorts%'

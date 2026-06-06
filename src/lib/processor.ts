@@ -9,7 +9,10 @@ import {
   buildDailyFollowUp,
   type DailyFollowUpDigest,
 } from "@/lib/digests/follow-up";
-import type { DailyDigestTranscriptRecord } from "@/lib/digests/grounding";
+import {
+  VERIFIED_TRANSCRIPT_SOURCES,
+  type DailyDigestTranscriptRecord,
+} from "@/lib/digests/grounding";
 import { isGroundedDailyDigestRow } from "@/lib/digests/rendering";
 import { filterDiscoveredMainVideos } from "@/lib/ingest/discovery-filter";
 import { selectVideoIdsNeedingIngestion } from "@/lib/ingest/discovery";
@@ -27,6 +30,9 @@ export type QueueItem = {
   published_at: string | Date | null;
   duration_seconds: number | null;
   retry_count: number;
+  item_created_at: string | Date;
+  item_status: QueueScanStatus;
+  scraper_missing_since: string | Date | null;
 };
 
 type QueueScanStatus = "queued" | "failed" | "waiting_for_transcript" | "processing";
@@ -35,6 +41,7 @@ const RETRY_MAX_ATTEMPTS = numberEnv("INGEST_ITEM_MAX_RETRIES", 5);
 const RETRY_DELAY_SECONDS = numberEnv("INGEST_ITEM_RETRY_DELAY_SECONDS", 3600);
 const TRANSCRIPT_MAX_ATTEMPTS = numberEnv("TRANSCRIPT_MAX_RETRY_ATTEMPTS", 48);
 const TRANSCRIPT_EXTENDED_RETRY_SECONDS = numberEnv("TRANSCRIPT_EXTENDED_RETRY_SECONDS", 86400);
+const TRANSCRIPT_API_FALLBACK_AFTER_HOURS = numberEnv("TRANSCRIPT_API_FALLBACK_AFTER_HOURS", 2);
 const TRANSCRIPT_RETRY_DELAY_SECONDS = Math.ceil(transcriptRetryDelayMs() / 1000);
 
 export type ProcessIngestQueueOptions = {
@@ -67,10 +74,21 @@ export async function processIngestQueue(
         videos.published_at,
         videos.duration_seconds,
         ingest_job_items.retry_count,
-        ingest_job_items.status as item_status
+        ingest_job_items.created_at as item_created_at,
+        ingest_job_items.status as item_status,
+        scraper_missing.created_at as scraper_missing_since
       from ingest_job_items
       join ingest_jobs on ingest_jobs.id = ingest_job_items.job_id
       join videos on videos.id = ingest_job_items.video_id
+      left join lateral (
+        select transcripts.created_at
+        from transcripts
+        where transcripts.video_id = videos.id
+          and transcripts.source = 'youtube_transcript_free'
+          and transcripts.needs_retry = true
+        order by transcripts.created_at asc
+        limit 1
+      ) scraper_missing on true
       where ingest_job_items.status = 'queued'
          or (
           ingest_job_items.status = 'waiting_for_transcript'
@@ -80,7 +98,7 @@ export async function processIngestQueue(
               select 1
               from transcripts
               where transcripts.video_id = videos.id
-                and transcripts.source = 'youtube_transcript_free'
+                and transcripts.source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
                 and transcripts.status = 'completed'
                 and transcripts.transcript_text is not null
             )
@@ -91,7 +109,7 @@ export async function processIngestQueue(
                 select 1
                 from transcripts
                 where transcripts.video_id = videos.id
-                  and transcripts.source = 'youtube_transcript_free'
+                  and transcripts.source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
                   and transcripts.needs_retry = true
                   and (
                     transcripts.retry_after is null
@@ -120,7 +138,7 @@ export async function processIngestQueue(
               select 1
               from transcripts
               where transcripts.video_id = videos.id
-                and transcripts.source = 'youtube_transcript_free'
+                and transcripts.source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
                 and transcripts.status = 'completed'
                 and transcripts.transcript_text is not null
             )
@@ -134,7 +152,7 @@ export async function processIngestQueue(
                   select 1
                   from transcripts
                   where transcripts.video_id = videos.id
-                    and transcripts.source = 'youtube_transcript_free'
+                    and transcripts.source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
                     and transcripts.needs_retry = true
                     and (
                       transcripts.retry_after is null
@@ -198,7 +216,10 @@ export async function processIngestQueue(
         candidates.url,
         candidates.published_at,
         candidates.duration_seconds,
-        ingest_job_items.retry_count
+        ingest_job_items.retry_count,
+        candidates.item_created_at,
+        candidates.item_status,
+        candidates.scraper_missing_since
     )
     select * from claimed
   `);
@@ -233,6 +254,22 @@ function getIngestProcessConcurrency(limit: number) {
   );
 }
 
+function shouldUseManagedTranscriptFallback(item: QueueItem) {
+  if (!hasManagedTranscriptApi()) return false;
+  if (item.item_status !== "waiting_for_transcript") return false;
+  if (!item.scraper_missing_since) return false;
+  const scraperFailedAt = new Date(item.scraper_missing_since).getTime();
+  if (!Number.isFinite(scraperFailedAt)) {
+    return item.retry_count >= Math.max(2, Math.ceil(TRANSCRIPT_API_FALLBACK_AFTER_HOURS));
+  }
+  const ageMs = Date.now() - scraperFailedAt;
+  return ageMs >= TRANSCRIPT_API_FALLBACK_AFTER_HOURS * 60 * 60 * 1000;
+}
+
+function hasManagedTranscriptApi() {
+  return Boolean(process.env.TRANSCRIPT_API_KEY || process.env.API_KEY);
+}
+
 async function getQueueScanCandidateCounts() {
   const sql = getSql();
   const rows = await sql<Array<{ status: QueueScanStatus; count: number }>>`
@@ -249,7 +286,7 @@ async function getQueueScanCandidateCounts() {
             select 1
             from transcripts
             where transcripts.video_id = videos.id
-              and transcripts.source = 'youtube_transcript_free'
+              and transcripts.source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
               and transcripts.status = 'completed'
               and transcripts.transcript_text is not null
           )
@@ -260,7 +297,7 @@ async function getQueueScanCandidateCounts() {
               select 1
               from transcripts
               where transcripts.video_id = videos.id
-                and transcripts.source = 'youtube_transcript_free'
+                and transcripts.source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
                 and transcripts.needs_retry = true
                 and (
                   transcripts.retry_after is null
@@ -382,7 +419,9 @@ async function processQueueItem(item: QueueItem, options: ProcessIngestQueueOpti
       return;
     }
 
-    const transcript = await ensureTranscript(item);
+    const transcript = await ensureTranscript(item, {
+      allowManagedFallback: shouldUseManagedTranscriptFallback(item),
+    });
     if (transcript.status === "missing") {
       const nextRetryCount = item.retry_count + 1;
       const retryAfter =
@@ -583,7 +622,10 @@ async function markQueueItemTerminalFailure(
   });
 }
 
-export async function ensureTranscript(item: QueueItem) {
+export async function ensureTranscript(
+  item: QueueItem,
+  options: { allowManagedFallback?: boolean } = {},
+) {
   const sql = getSql();
   const existing = await sql<DailyDigestTranscriptRecord[]>`
     select
@@ -599,9 +641,9 @@ export async function ensureTranscript(item: QueueItem) {
     from transcripts
     where video_id = ${item.video_id}
       and status = 'completed'
-      and source = 'youtube_transcript_free'
+      and source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
       and transcript_text is not null
-    order by created_at desc
+    order by case when source = 'youtube_transcript_free' then 0 else 1 end, created_at desc
     limit 1
   `;
 
@@ -617,7 +659,10 @@ export async function ensureTranscript(item: QueueItem) {
           extraction_metadata = coalesce(
             extraction_metadata,
             ${sql.json({
-              api: "youtube-transcript",
+              api:
+                existing[0].source === "transcriptapi_com"
+                  ? "transcriptapi.com"
+                  : "youtube-transcript",
               source: existing[0].source,
               youtubeVideoId: item.youtube_video_id,
               segmentCount: existing[0].timed_segments?.length ?? 0,
@@ -643,12 +688,18 @@ export async function ensureTranscript(item: QueueItem) {
   logIngest("transcript-fetch-started", {
     videoId: item.video_id,
     youtubeVideoId: item.youtube_video_id,
+    allowManagedFallback: options.allowManagedFallback ?? false,
   });
-  const freeTranscript = await fetchFreeTranscript(item.youtube_video_id);
+  const freeTranscript = await fetchFreeTranscript(item.youtube_video_id, {
+    allowManagedFallback: options.allowManagedFallback,
+  });
   if (freeTranscript.status === "completed") {
     const transcriptLength = freeTranscript.transcript_text.length;
     const extractionMetadata = {
-      api: "youtube-transcript",
+      api:
+        freeTranscript.source === "transcriptapi_com"
+          ? "transcriptapi.com"
+          : "youtube-transcript",
       source: freeTranscript.source,
       youtubeVideoId: item.youtube_video_id,
       segmentCount: freeTranscript.timed_segments.length,
@@ -946,7 +997,7 @@ export async function ensureDailyDigest(
     update transcripts
     set status = 'failed', needs_retry = false, retry_after = null, processing_status = 'failed', updated_at = now()
     where video_id = ${item.video_id}
-      and source <> 'youtube_transcript_free'
+      and source <> all(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
       and status = 'completed'
   `;
   logIngest("daily-digest-grounding-validated", {

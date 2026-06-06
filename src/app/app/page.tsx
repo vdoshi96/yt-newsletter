@@ -13,6 +13,7 @@ import {
 import { ExplanationLevelPanel } from "@/components/explanation-level-panel";
 import { getCatalogFirstWeeklyStart, getCatalogStartDate } from "@/lib/catalog";
 import { getSql } from "@/lib/db";
+import { VERIFIED_TRANSCRIPT_SOURCES } from "@/lib/digests/grounding";
 import { dailyDigestSchema } from "@/lib/digests/schemas";
 import { requireUser } from "@/lib/auth/current-user";
 import { getIngestJobsForUser } from "@/lib/creators";
@@ -465,7 +466,7 @@ async function getLatestDailyPreview(userId: string) {
     where user_creators.user_id = ${userId}
       and daily_digests.grounding_status = 'grounded'
       and daily_digests.digest_date >= ${catalogStartDate}::date
-      and daily_digests.transcript_source = 'youtube_transcript_free'
+      and daily_digests.transcript_source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
       and coalesce(videos.duration_seconds, 0) >= ${MAIN_VIDEO_MIN_SECONDS}
       and lower(coalesce(videos.title, '')) not like '%#shorts%'
       and lower(coalesce(videos.title, '')) not like '% #short %'

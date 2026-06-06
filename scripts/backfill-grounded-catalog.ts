@@ -1,7 +1,10 @@
 import "./load-env";
 import { closeSql, getSql } from "@/lib/db";
 import { normalizeConcurrency, runBoundedConcurrency } from "@/lib/concurrency";
-import { minimumTranscriptCharacters } from "@/lib/digests/grounding";
+import {
+  VERIFIED_TRANSCRIPT_SOURCES,
+  minimumTranscriptCharacters,
+} from "@/lib/digests/grounding";
 import {
   filterBackfillVideosByDate,
   filterBackfillCatalogVideos,
@@ -209,7 +212,7 @@ async function getCandidateRows(videoIds: string[], minTranscriptCharacters: num
           and coalesce(
             daily_digests.transcript_source,
             daily_digests.full_digest_json->'transcript_grounding'->>'transcript_source'
-          ) = 'youtube_transcript_free'
+          ) = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
           and coalesce(
             daily_digests.transcript_length,
             nullif(daily_digests.full_digest_json->'transcript_grounding'->>'transcript_length', '')::int,
@@ -271,7 +274,7 @@ async function getDryRunCandidateRows(
           and coalesce(
             daily_digests.transcript_source,
             daily_digests.full_digest_json->'transcript_grounding'->>'transcript_source'
-          ) = 'youtube_transcript_free'
+          ) = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
           and coalesce(
             daily_digests.transcript_length,
             nullif(daily_digests.full_digest_json->'transcript_grounding'->>'transcript_length', '')::int,

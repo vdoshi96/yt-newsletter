@@ -1,5 +1,6 @@
 import "./load-env";
 import { closeSql, getSql } from "@/lib/db";
+import { VERIFIED_TRANSCRIPT_SOURCES } from "@/lib/digests/grounding";
 import { fetchFreeTranscript } from "@/lib/youtube/transcripts";
 
 type RecoveryRow = {
@@ -117,7 +118,7 @@ async function getWaitingWithCompletedTranscript(limit: number) {
         select 1
         from transcripts
         where transcripts.video_id = videos.id
-          and transcripts.source = 'youtube_transcript_free'
+          and transcripts.source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
           and transcripts.status = 'completed'
           and transcripts.transcript_text is not null
       )
@@ -149,7 +150,7 @@ async function getTerminalFailedWithCompletedTranscript(limit: number) {
         select 1
         from transcripts
         where transcripts.video_id = videos.id
-          and transcripts.source = 'youtube_transcript_free'
+          and transcripts.source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
           and transcripts.status = 'completed'
           and transcripts.transcript_text is not null
       )
@@ -204,7 +205,7 @@ async function getWaitingTranscriptRowsWithoutCompletedTranscript(limit: number)
         select 1
         from transcripts
         where transcripts.video_id = videos.id
-          and transcripts.source = 'youtube_transcript_free'
+          and transcripts.source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
           and transcripts.status = 'completed'
           and transcripts.transcript_text is not null
       )
@@ -236,7 +237,7 @@ async function getTerminalFailedTranscriptRowsWithoutCompletedTranscript(limit: 
         select 1
         from transcripts
         where transcripts.video_id = videos.id
-          and transcripts.source = 'youtube_transcript_free'
+          and transcripts.source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
           and transcripts.status = 'completed'
           and transcripts.transcript_text is not null
       )
@@ -277,7 +278,7 @@ async function getDuplicateOpenIngestRows(limit: number) {
                 select 1
                 from transcripts
                 where transcripts.video_id = ingest_job_items.video_id
-                  and transcripts.source = 'youtube_transcript_free'
+                  and transcripts.source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
                   and transcripts.status = 'completed'
                   and transcripts.transcript_text is not null
               ) then 0
@@ -326,7 +327,7 @@ async function collapseDuplicateOpenIngestRows() {
                 select 1
                 from transcripts
                 where transcripts.video_id = ingest_job_items.video_id
-                  and transcripts.source = 'youtube_transcript_free'
+                  and transcripts.source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
                   and transcripts.status = 'completed'
                   and transcripts.transcript_text is not null
               ) then 0

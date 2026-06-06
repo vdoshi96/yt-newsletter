@@ -2,7 +2,10 @@ import { generateWeeklyDigestPayload } from "@/lib/ai";
 import { getPastMonthBaselineWindow, type BaselineWeekWindow } from "@/lib/baseline/month";
 import { getCatalogStartDate } from "@/lib/catalog";
 import { getSql } from "@/lib/db";
-import { minimumTranscriptCharacters } from "@/lib/digests/grounding";
+import {
+  VERIFIED_TRANSCRIPT_SOURCES,
+  minimumTranscriptCharacters,
+} from "@/lib/digests/grounding";
 import { loadPrompt } from "@/lib/prompts";
 import {
   buildWeeklySourceReferences,
@@ -67,7 +70,7 @@ async function ensureBaselineWeekDigest(
       and digest_date between ${window.weekStart} and ${window.weekEnd}
       and digest_date >= ${catalogStartDate}::date
       and grounding_status = 'grounded'
-      and transcript_source = 'youtube_transcript_free'
+      and transcript_source = any(${VERIFIED_TRANSCRIPT_SOURCES}::text[])
       and coalesce(transcript_length, 0) >= ${minTranscriptCharacters}
     order by digest_date asc, created_at asc
   `;

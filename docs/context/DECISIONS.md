@@ -14,7 +14,7 @@ The LLM returns JSON and a `layout_type` from a fixed enum. React chooses the la
 
 ## 2026-05-09: Transcript-Grounded Daily Digests
 
-Free YouTube transcripts are stored as `youtube_transcript_free`. Daily digests may only be generated from verified transcript text tied to the exact `video_id`; model-derived notes, title-only metadata, descriptions, thumbnails, and prior knowledge are forbidden as source evidence. Missing or invalid transcripts keep ingestion waiting/failed instead of publishing a digest. Regeneration uses `npm run daily:regenerate -- --date=YYYY-MM-DD`, which invalidates old non-transcript fallback records after a replacement digest passes transcript grounding checks.
+Free YouTube transcripts are stored as `youtube_transcript_free`. If the scraper path keeps failing after the configured waiting window, TranscriptAPI rows are stored as `transcriptapi_com` and are also treated as verified transcript text. Daily digests may only be generated from verified transcript text tied to the exact `video_id`; model-derived notes, title-only metadata, descriptions, thumbnails, and prior knowledge are forbidden as source evidence. Missing or invalid transcripts keep ingestion waiting/failed instead of publishing a digest. Regeneration uses `npm run daily:regenerate -- --date=YYYY-MM-DD`, which invalidates old non-transcript fallback records after a replacement digest passes transcript grounding checks.
 
 ## 2026-05-09: Weekly Digest Archive
 
@@ -48,4 +48,4 @@ Weekly digest generation has an explicit Saturday cron route at `/api/cron/gener
 
 ## 2026-05-26: Transcript Recovery and Daily Cron Isolation
 
-Daily discovery and queue-processing cron routes must not generate weekly digests inline. Transcript fetches are bounded by `TRANSCRIPT_FETCH_TIMEOUT_MS`, transcript-missing rows move from hourly retries to extended retries instead of becoming final content, stale processing rows are reclaimed only within the retry budget, and `npm run ingest:recover` is the dry-run-first path for rows wedged by earlier transcript retry behavior.
+Daily discovery and queue-processing cron routes must not generate weekly digests inline. Transcript fetches are bounded by `TRANSCRIPT_FETCH_TIMEOUT_MS`, transcript-missing rows move from hourly retries to extended retries instead of becoming final content, stale processing rows are reclaimed only within the retry budget, and `npm run ingest:recover` is the dry-run-first path for rows wedged by earlier transcript retry behavior. The scraper remains the default transcript provider; TranscriptAPI is only attempted when `TRANSCRIPT_API_KEY` is present and the first `youtube_transcript_free` miss is older than `TRANSCRIPT_API_FALLBACK_AFTER_HOURS` (default `2`).
