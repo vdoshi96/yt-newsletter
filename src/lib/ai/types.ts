@@ -1,12 +1,10 @@
-export type AiProvider = "deepseek" | "qwen" | "kimi" | "gemini";
+export type AiProvider = "deepseek" | "qwen" | "kimi";
 
 export type AiTaskType =
   | "daily_structured_digest"
   | "daily_plain_english_explanation"
   | "weekly_digest"
-  | "dashboard_image"
-  | "podcast_audio"
-  | "podcast_script";
+  | "dashboard_image";
 
 export type AiCallContext = {
   provider: AiProvider;

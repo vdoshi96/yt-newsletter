@@ -11,9 +11,6 @@ export async function callChatProvider(input: {
   reasoningEffort?: "high" | "max";
   timeoutMs?: number;
 }): Promise<JsonChatResult> {
-  if (input.provider === "gemini") {
-    return callGemini(input);
-  }
   return callOpenAiCompatible(input);
 }
 
@@ -82,64 +79,6 @@ async function callOpenAiCompatible(input: {
     };
   } catch (error) {
     throw normalizeProviderError(input.provider, error, timeout.timeoutMs);
-  } finally {
-    timeout.cancel();
-  }
-}
-
-async function callGemini(input: {
-  model: string;
-  messages: ChatMessage[];
-  maxTokens?: number;
-  timeoutMs?: number;
-}) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("Missing GEMINI_API_KEY.");
-
-  const prompt = input.messages.map((message) => `${message.role}: ${message.content}`).join("\n\n");
-  const timeout = createProviderTimeout("gemini", input.timeoutMs);
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${input.model}:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        signal: timeout.signal,
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.2,
-            responseMimeType: "application/json",
-            maxOutputTokens: input.maxTokens,
-          },
-        }),
-      },
-    );
-
-    const responseBody = await response.text();
-
-    if (!response.ok) {
-      throw new Error(
-        `Gemini:${input.model} request failed: ${response.status} ${truncateProviderBody(responseBody)}`,
-      );
-    }
-
-    const json = JSON.parse(responseBody) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
-    };
-    const text = json.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
-    if (!text.trim()) {
-      throw new Error(`Gemini:${input.model} returned empty content.`);
-    }
-    return {
-      text,
-      inputTokens: json.usageMetadata?.promptTokenCount ?? estimateTokens(prompt),
-      outputTokens: json.usageMetadata?.candidatesTokenCount ?? estimateTokens(text),
-      estimatedCostUsd: null,
-    };
-  } catch (error) {
-    throw normalizeProviderError("gemini", error, timeout.timeoutMs);
   } finally {
     timeout.cancel();
   }

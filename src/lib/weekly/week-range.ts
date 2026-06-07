@@ -23,12 +23,6 @@ export function isWeeklyDigestReady(range: WeeklyRange, now = new Date()) {
   return today > range.weekEnd;
 }
 
-export function isWeeklyPodcastReady(range: WeeklyRange, now = new Date()) {
-  const podcastReleaseDate = new Date(`${range.weekEnd}T00:00:00.000Z`);
-  podcastReleaseDate.setUTCDate(podcastReleaseDate.getUTCDate() + 2);
-  return toDateString(now) >= toDateString(podcastReleaseDate);
-}
-
 export function toDateString(date: Date) {
   return date.toISOString().slice(0, 10);
 }

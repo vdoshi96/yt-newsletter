@@ -4,9 +4,9 @@
 
 The app uses the `postgres` package with `DATABASE_URL` for server-side database access. This keeps all DB reads/writes server-only and avoids exposing Supabase API keys to client components.
 
-## 2026-05-09: Supabase Storage Only for Assets
+## 2026-05-09: Supabase Storage Retired
 
-Supabase JS is used lazily for Storage uploads when generated audio/image assets are enabled and `SUPABASE_SERVICE_ROLE_KEY` is present.
+The original MVP used Supabase Storage for generated media assets. The weekly podcast feature was retired on 2026-06-07, and the active app no longer uploads generated audio assets.
 
 ## 2026-05-09: Bounded Digest Layouts
 
@@ -18,29 +18,29 @@ Free YouTube transcripts are stored as `youtube_transcript_free`. If the scraper
 
 ## 2026-05-09: Weekly Digest Archive
 
-The live Nate B. Jones catalog starts on March 1, 2026 (`CATALOG_START_DATE`). Daily views, weekly generation, weekly archive selection, and podcast generation should ignore older seeded or experimental rows. Weekly digests are not capped; every completed Saturday-to-Friday week with catalog daily digests can be stored and shown in the archive. Future weekly editions appear Saturday morning after the Friday close.
+The live Nate B. Jones catalog starts on March 1, 2026 (`CATALOG_START_DATE`). Daily views, weekly generation, and weekly archive selection should ignore older seeded or experimental rows. Weekly digests are not capped; every completed Saturday-to-Friday week with catalog daily digests can be stored and shown in the archive. Future weekly editions appear Saturday morning after the Friday close.
 
 ## 2026-05-09: Freshness-Oriented Cron Split
 
 Creator discovery runs hourly and queue processing runs every five minutes. Discovery is idempotent and queues videos that lack a daily digest and lack an open ingest item, even if the video row already exists. Daily digest writes are keyed by `video_id`, so overlapping or recovered jobs do not create duplicate digests.
 
-## 2026-05-09: Podcast Quality Path
+## 2026-06-07: Weekly Podcast Retirement
 
-The automated high-quality podcast path is `npm run podcasts:generate`, using an approximately 30-minute two-host script and Gemini Flash native multi-speaker TTS by default. Host casts rotate weekly between Maya/Theo and Nina/Jonah while preserving the Gemini voice IDs underneath. The older Qwen voice-designed segmented path remains available as an explicit provider. Podcast generation selects ready catalog weeks by default, stores provider/model/voice metadata, and marks audio failures without presenting placeholders as final audio. NotebookLM is documented as manual because it does not expose a stable app API for this workflow.
+The automated weekly podcast path is retired. Weekly digest generation no longer creates podcast scripts, the podcast page is removed from navigation, and Vercel no longer schedules podcast audio retries. Historical database columns may remain for compatibility with existing data, but active code should not add new weekly podcast assets.
 
 ## 2026-05-09: Weekly Calendar Navigation
 
-Weekly digest and podcast pages use a `week=YYYY-MM-DD` query parameter that normalizes any selected date to the app's Saturday-to-Friday week. Weekly story cards link to the corresponding daily digest date and rely on the daily empty state when no daily digest exists.
+Weekly digest pages use a `week=YYYY-MM-DD` query parameter that normalizes any selected date to the app's Saturday-to-Friday week. Weekly story cards link to the corresponding daily digest date and rely on the daily empty state when no daily digest exists.
 
 ## 2026-05-09: Grounded Back-Catalog Regeneration
 
-Back-catalog regeneration is driven by `npm run backfill:grounded`. The command re-discovers configured creator catalogs, queues videos that are missing grounded daily digests, optionally force-regenerates trusted rows, and refreshes weekly digests after daily processing. It stores queryable transcript, digest, weekly, podcast, and asset metadata while preserving the hard rule that missing transcripts block final content instead of falling back to titles.
+Back-catalog regeneration is driven by `npm run backfill:grounded`. The command re-discovers configured creator catalogs, queues videos that are missing grounded daily digests, optionally force-regenerates trusted rows, and refreshes weekly digests after daily processing. It stores queryable transcript, digest, and weekly metadata while preserving the hard rule that missing transcripts block final content instead of falling back to titles.
 
 ## 2026-05-16: DeepSeek V4 Pro Editorial Path
 
-Daily digests, weekly digests, and provider-generated podcast scripts use `deepseek-v4-pro` as the primary high-quality route. The DeepSeek request path explicitly enables thinking mode, omits temperature for thinking requests, allows a longer DeepSeek timeout, does not impose an app-level daily/weekly output cap unless explicitly configured, retries the primary route before fallback, and logs provider/model/attempt metadata. Dashboard daily counts are scoped to grounded long-form digests from the latest 30 days instead of historical rows.
+Daily and weekly digests use `deepseek-v4-pro` as the primary high-quality route. The DeepSeek request path explicitly enables thinking mode, omits temperature for thinking requests, allows a longer DeepSeek timeout, does not impose an app-level daily/weekly output cap unless explicitly configured, retries the primary route before fallback, and logs provider/model/attempt metadata. Dashboard daily counts are scoped to grounded long-form digests from the latest 30 days instead of historical rows.
 
-Weekly catalog generation fails closed by default if the provider route is exhausted (`ALLOW_WEEKLY_DIGEST_FALLBACK=false`) and gives DeepSeek five attempts before fallback providers. This prevents deterministic `local:fallback` weekly rows from silently satisfying backlog recovery or podcast generation.
+Weekly catalog generation fails closed by default if the provider route is exhausted (`ALLOW_WEEKLY_DIGEST_FALLBACK=false`) and gives DeepSeek five attempts before fallback providers. This prevents deterministic `local:fallback` weekly rows from silently satisfying backlog recovery.
 
 ## 2026-05-16: Weekly Publication Navigation
 

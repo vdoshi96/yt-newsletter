@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CalendarDays, RotateCcw } from "lucide-react";
+import { DateKeyboardNavigation } from "@/components/date-keyboard-navigation";
 import { requireUser } from "@/lib/auth/current-user";
 import { getCatalogFirstWeeklyStart } from "@/lib/catalog";
 import { getCreatorsForUser } from "@/lib/creators";
@@ -40,6 +41,18 @@ export default async function WeeklyPage({
   const availableWeeks = finalDigests.map((digest) => digest.week_start);
   const selectedWeekStart = resolveSelectedWeekStart(params.week, availableWeeks);
   const latestPublishedWeekStart = [...availableWeeks].sort().at(-1) ?? selectedWeekStart;
+  const previousWeekHref = creatorId
+    ? buildDigestHref("/app/weekly", {
+        creatorId,
+        week: shiftIsoDate(selectedWeekStart, -7),
+      })
+    : "/app/weekly";
+  const nextWeekHref = creatorId
+    ? buildDigestHref("/app/weekly", {
+        creatorId,
+        week: shiftIsoDate(selectedWeekStart, 7),
+      })
+    : "/app/weekly";
   const selectedDigest =
     finalDigests.find((digest) => digest.week_start === selectedWeekStart) ??
     digests.find((digest) => digest.week_start === selectedWeekStart) ??
@@ -47,6 +60,7 @@ export default async function WeeklyPage({
 
   return (
     <div className="space-y-6">
+      <DateKeyboardNavigation previousHref={previousWeekHref} nextHref={nextWeekHref} />
       <section className="newspaper-sheet">
         <p className="section-kicker">This Week in AI</p>
         <h2 className="mt-3 text-5xl font-black tracking-tight text-slate-950">
@@ -352,9 +366,22 @@ function parseWeeklyDigestRow(digest: WeeklyRow): WeeklyDigestPayload {
       what_changed: "No change summary is available.",
       what_to_do_next: [],
       free_learning_plan: [],
-      podcast_script: "No podcast script is available.",
     },
   );
+}
+
+function buildDigestHref(pathname: string, params: Record<string, string>) {
+  const query = new URLSearchParams(params);
+  return `${pathname}?${query.toString()}`;
+}
+
+function shiftIsoDate(dateString: string, days: number) {
+  const date = new Date(`${dateString}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    return new Date().toISOString().slice(0, 10);
+  }
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 async function getWeeklyDigests(userId: string, creatorId: string) {

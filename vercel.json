@@ -11,10 +11,6 @@
     {
       "path": "/api/cron/generate-weekly-digest",
       "schedule": "13 13 * * 6"
-    },
-    {
-      "path": "/api/cron/generate-weekly-podcast",
-      "schedule": "23 14 * * *"
     }
   ]
 }

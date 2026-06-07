@@ -147,8 +147,6 @@ create table if not exists weekly_digests (
   ranked_topics jsonb,
   what_changed text,
   what_to_do_next jsonb,
-  podcast_script text,
-  podcast_audio_asset_id uuid,
   full_digest_json jsonb,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
@@ -182,27 +180,6 @@ create table if not exists topic_edges (
   explanation text,
   created_at timestamptz default now()
 );
-
-create table if not exists assets (
-  id uuid primary key default gen_random_uuid(),
-  creator_id uuid references creators(id) on delete cascade,
-  video_id uuid references videos(id) on delete cascade,
-  weekly_digest_id uuid references weekly_digests(id) on delete cascade,
-  asset_type text,
-  provider text,
-  model text,
-  prompt text,
-  storage_path text,
-  public_url text,
-  created_at timestamptz default now()
-);
-
-alter table weekly_digests
-  drop constraint if exists weekly_digests_audio_asset_fk;
-
-alter table weekly_digests
-  add constraint weekly_digests_audio_asset_fk
-  foreign key (podcast_audio_asset_id) references assets(id) on delete set null;
 
 create table if not exists model_usage (
   id uuid primary key default gen_random_uuid(),
@@ -248,16 +225,6 @@ alter table weekly_digests
   add column if not exists generation_model text,
   add column if not exists generated_at timestamptz,
   add column if not exists processing_status text default 'pending',
-  add column if not exists podcast_status text default 'pending',
-  add column if not exists podcast_generation_metadata jsonb,
-  add column if not exists podcast_generated_at timestamptz,
-  add column if not exists podcast_model text,
-  add column if not exists podcast_voice_config jsonb,
-  add column if not exists source_references jsonb;
-
-alter table assets
-  add column if not exists generation_status text default 'pending',
-  add column if not exists generation_metadata jsonb,
   add column if not exists source_references jsonb;
 
 delete from transcripts
@@ -288,34 +255,6 @@ begin
   ) then
     alter table transcripts
       add constraint transcripts_video_source_unique unique (video_id, source);
-  end if;
-end $$;
-
-delete from assets
-where id in (
-  select id
-  from (
-    select
-      id,
-      row_number() over (
-        partition by storage_path
-        order by created_at desc, id desc
-      ) as duplicate_rank
-    from assets
-    where storage_path is not null
-  ) ranked_assets
-  where duplicate_rank > 1
-);
-
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_constraint
-    where conname = 'assets_storage_path_unique'
-  ) then
-    alter table assets
-      add constraint assets_storage_path_unique unique (storage_path);
   end if;
 end $$;
 
@@ -396,7 +335,6 @@ create index if not exists ingest_job_items_processing_status_idx on ingest_job_
 create index if not exists daily_digests_creator_date_idx on daily_digests (creator_id, digest_date desc);
 create index if not exists daily_digests_grounding_status_idx on daily_digests (grounding_status, generated_at desc);
 create index if not exists weekly_digests_creator_week_idx on weekly_digests (creator_id, week_start desc);
-create index if not exists weekly_digests_podcast_status_idx on weekly_digests (podcast_status, podcast_generated_at desc);
 create index if not exists model_usage_created_idx on model_usage (created_at desc);
 
 drop trigger if exists set_app_users_updated_at on app_users;
@@ -453,9 +391,4 @@ alter table weekly_digests enable row level security;
 alter table topics enable row level security;
 alter table video_topics enable row level security;
 alter table topic_edges enable row level security;
-alter table assets enable row level security;
 alter table model_usage enable row level security;
-
-insert into storage.buckets (id, name, public)
-values ('yt-newsletter-assets', 'yt-newsletter-assets', true)
-on conflict (id) do nothing;

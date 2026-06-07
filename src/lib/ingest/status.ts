@@ -3,7 +3,6 @@ export const PROCESSING_STATUSES = [
   "transcript_missing",
   "transcript_ready",
   "digest_generated",
-  "podcast_generated",
   "failed",
 ] as const;
 
@@ -27,8 +26,6 @@ export function processingStatusLabel(status: ProcessingStatus) {
       return "Transcript ready";
     case "digest_generated":
       return "Digest generated";
-    case "podcast_generated":
-      return "Podcast generated";
     case "failed":
       return "Failed";
   }

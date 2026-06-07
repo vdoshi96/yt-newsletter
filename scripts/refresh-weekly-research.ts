@@ -6,12 +6,6 @@ import {
   VERIFIED_TRANSCRIPT_SOURCES,
   minimumTranscriptCharacters,
 } from "@/lib/digests/grounding";
-import { getPodcastScriptConfig } from "@/lib/podcasts/config";
-import {
-  buildTwoHostPodcastLines,
-  formatTwoHostPodcastScript,
-  getPodcastCastForWeek,
-} from "@/lib/podcasts/two-host";
 import { buildWeeklySourceReferences } from "@/lib/weekly/source-text";
 
 type DailyRow = {
@@ -554,8 +548,7 @@ async function main() {
       const rawPayload = buildPayload(week, dailyRows, config);
       const sourceReferences = buildWeeklySourceReferences(dailyRows);
       const generationTimestamp = new Date().toISOString();
-      const scriptConfig = getPodcastScriptConfig();
-      const draftPayload = weeklyDigestSchema.parse({
+      const payload = weeklyDigestSchema.parse({
         ...rawPayload,
         weekly_grounding: {
           grounded: dailyRows.length > 0,
@@ -572,27 +565,6 @@ async function main() {
           ],
         },
         source_references: sourceReferences,
-        podcast_generation: {
-          status: "pending",
-          source_references: sourceReferences,
-        },
-      });
-      const cast = getPodcastCastForWeek(week.week_start);
-      const podcastScript = formatTwoHostPodcastScript(
-        buildTwoHostPodcastLines(draftPayload, scriptConfig, cast),
-      );
-      const payload = weeklyDigestSchema.parse({
-        ...draftPayload,
-        podcast_script: podcastScript,
-        podcast_generation: {
-          status: "script_generated",
-          target_minutes: scriptConfig.targetMinutes,
-          words_per_minute: scriptConfig.wordsPerMinute,
-          word_count: podcastScript.split(/\s+/).filter(Boolean).length,
-          cast_id: cast.id,
-          generated_at: generationTimestamp,
-          source_references: sourceReferences,
-        },
       });
       await sql`
         update weekly_digests
@@ -603,19 +575,12 @@ async function main() {
           generation_model = ${payload.weekly_grounding.generation_model ?? null},
           generated_at = ${payload.weekly_grounding.generated_at ?? null},
           processing_status = ${payload.weekly_grounding.grounded ? "digest_generated" : "pending"},
-          podcast_audio_asset_id = null,
-          podcast_status = 'pending',
-          podcast_generation_metadata = ${sql.json(toJsonParameter(payload.podcast_generation))},
-          podcast_generated_at = null,
-          podcast_model = null,
-          podcast_voice_config = null,
           source_references = ${sql.json(toJsonParameter(sourceReferences))},
           title = ${payload.title},
           newsletter_markdown = ${payload.newsletter_markdown},
           ranked_topics = ${sql.json(payload.ranked_topics)},
           what_changed = ${payload.what_changed},
           what_to_do_next = ${sql.json(payload.what_to_do_next)},
-          podcast_script = ${payload.podcast_script},
           full_digest_json = ${sql.json(toJsonParameter(payload))},
           updated_at = now()
         where id = ${week.id}
@@ -668,7 +633,6 @@ function buildPayload(week: WeeklyRow, dailyRows: DailyRow[], config: WeeklyConf
     what_changed: config.whatChanged,
     what_to_do_next: config.actions,
     free_learning_plan: config.learningPlan,
-    podcast_script: buildPodcastScript(week, config, posts),
   };
 }
 
@@ -826,25 +790,6 @@ function buildNewsletterMarkdown(input: {
     "",
     "This weekly edition combines stored daily digests with date-scoped research notes. It avoids treating announcements as proof of durable ROI, and it does not assume the creator's framing covers the whole AI market.",
   ].join("\n");
-}
-
-function buildPodcastScript(
-  week: WeeklyRow,
-  config: WeeklyConfig,
-  posts: Array<{ title: string; why_it_matters: string }>,
-) {
-  const topPosts = posts.slice(0, 4).map((post) => post.title).join("; ");
-  return [
-    "Clara: Welcome back. This week we are looking at AI less as a shiny demo and more as business infrastructure.",
-    `Ben: The dates are ${week.week_start} through ${week.week_end}, and the headline is ${config.title}.`,
-    `Clara: The first thing to know is ${config.executiveMemo}`,
-    `Ben: The posts that stood out were ${topPosts}.`,
-    `Clara: For boards, the practical question is not whether AI sounds impressive. It is whether the workflow has controls, measurable value, and a person accountable for the result.`,
-    `Ben: The market angle is this: ${config.marketLens}`,
-    `Clara: And the caution is important. Announcements, demos, and creator commentary are signals. They are not proof that every company will get the same return.`,
-    "Ben: For listeners trying to upskill for free, pick one small workflow, map the steps, and test where AI actually saves time without hiding errors.",
-    "Clara: That is the week. Useful, serious, and still full of uncertainty.",
-  ].join("\n\n");
 }
 
 function truncate(value: string, maxLength: number) {

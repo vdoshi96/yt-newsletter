@@ -63,7 +63,7 @@ describe("weekly grounding safeguards", () => {
     ).not.toThrow();
   });
 
-  it("preserves transcript identifiers and quote anchors for podcast source references", () => {
+  it("preserves transcript identifiers and quote anchors for weekly source references", () => {
     const references = buildWeeklySourceReferences([
       {
         digest_date: "2026-05-02",

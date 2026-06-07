@@ -34,7 +34,7 @@ Editorial shape:
 - Include deeper research briefs on the most important topics for the week. Each research brief needs context, background, why it matters, practical interpretation, evidence, implications, and uncertainty. Avoid two-line briefs.
 - Research briefs should read like mini deep dives. Define the concept, connect it to the week's grounded examples, describe adjacent concepts a learner should understand, and separate evidence from inference.
 - The weekly digest can be substantially longer than a daily digest.
-- Do not write the final podcast script in the weekly JSON; the app builds the 30-minute two-host production from the grounded weekly payload.
+- Keep the weekly JSON focused on the reader-facing digest fields above. Do not add side products, scripts, or media-production fields.
 
 Explanation levels:
 - `explanation_levels.beginner` must be written for a layperson who has never coded, has no CS degree, and needs plain-English foundations.

@@ -15,10 +15,7 @@ export default async function SettingsPage({
   const params = await searchParams;
   const envStatus = requiredExternalEnvVars.map((name) => ({
     name,
-    present:
-      Boolean(process.env[name]) ||
-      (name === "NEXT_PUBLIC_SUPABASE_ANON_KEY" &&
-        Boolean(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)),
+    present: Boolean(process.env[name]),
   }));
 
   return (

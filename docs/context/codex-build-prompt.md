@@ -12,11 +12,10 @@ Before editing:
 - Review the recent PR intent before coding: freshness cron/discovery, transcript grounding, and grounded/idempotent back-catalog recovery.
 
 Hard product contract:
-- Never generate daily digests, weekly digests, or podcasts from YouTube titles, descriptions, thumbnails, model memory, or prior notes alone.
+- Never generate daily or weekly digests from YouTube titles, descriptions, thumbnails, model memory, or prior notes alone.
 - Daily digests can become final only from a verified `youtube_transcript_free` transcript tied to the exact `video_id`.
 - Missing/invalid transcripts must stay blocked/retryable or failed/incomplete in a visible way; they must not produce final content.
 - Weekly digests must use finalized, grounded daily rows only.
-- Podcasts must use finalized, grounded weekly rows only.
 - Preserve DeepSeek V4 Pro as the primary quality route unless a hard provider limitation requires fallback.
 
 Consensus problem statement:
@@ -55,7 +54,7 @@ Implementation requirements:
    - Do not wholesale reset unrelated failed rows or delete user data.
 
 4. Remove cron-budget hazards that directly interfere with daily availability.
-   - Verify `/api/cron/process-ingest`, `/api/cron/check-creators`, `/api/cron/generate-weekly-digest`, and `/api/cron/generate-weekly-podcast` are present in `vercel.json`, authenticated by `CRON_SECRET`, and have route `maxDuration` values consistent with their actual work.
+   - Verify `/api/cron/process-ingest`, `/api/cron/check-creators`, and `/api/cron/generate-weekly-digest` are present in `vercel.json`, authenticated by `CRON_SECRET`, and have route `maxDuration` values consistent with their actual work.
    - If hourly discovery or queue processing still performs weekly digest generation inline, move that work behind the dedicated weekly cron route so daily discovery/processing cannot spend its 300s budget on weekly AI calls.
    - Ensure provider timeouts cannot exceed the containing route budget unless the route explicitly supports the longer duration.
 
@@ -69,7 +68,7 @@ Implementation requirements:
    - Transcript fetch timeout/error classification tests.
    - Static or unit tests proving discovery skip logic only accepts grounded/generated daily rows as complete.
    - Tests or static assertions proving weekly generation is not run inline by the hourly discovery/process cron paths if you make that change.
-   - Keep existing grounding, weekly, podcast, and DeepSeek tests passing.
+   - Keep existing grounding, weekly, and DeepSeek tests passing.
 
 7. Verification and evidence:
    - Run `npm test`, `npm run lint`, `npx tsc --noEmit`, and `npm run build`.

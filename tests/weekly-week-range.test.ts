@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   getSaturdayToFridayWeekRange,
-  isWeeklyPodcastReady,
   isWeeklyDigestReady,
 } from "../src/lib/weekly/week-range";
 
@@ -20,10 +19,4 @@ describe("weekly digest week range", () => {
     expect(isWeeklyDigestReady(range, new Date("2026-05-16T00:00:00Z"))).toBe(true);
   });
 
-  it("waits until Sunday before publishing the weekly podcast", () => {
-    const range = getSaturdayToFridayWeekRange("2026-05-13T12:00:00Z");
-
-    expect(isWeeklyPodcastReady(range, new Date("2026-05-16T23:59:59Z"))).toBe(false);
-    expect(isWeeklyPodcastReady(range, new Date("2026-05-17T00:00:00Z"))).toBe(true);
-  });
 });

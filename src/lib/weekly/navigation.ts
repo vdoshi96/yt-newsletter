@@ -1,9 +1,5 @@
 import { getSaturdayToFridayWeekRange } from "./week-range";
 
-export function getCurrentSundayWeekStart(now = new Date()) {
-  return getCurrentWeeklyWindowStart(now);
-}
-
 export function getCurrentWeeklyWindowStart(now = new Date()) {
   return getSaturdayToFridayWeekRange(now).weekStart;
 }

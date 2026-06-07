@@ -1,6 +1,6 @@
-import { generatePodcastScriptPayload, generateWeeklyDigestPayload } from "@/lib/ai";
+import { generateWeeklyDigestPayload } from "@/lib/ai";
 import { getCatalogStartDate } from "@/lib/catalog";
-import { booleanEnv, numberEnv } from "@/lib/config";
+import { numberEnv } from "@/lib/config";
 import { normalizeConcurrency, runBoundedConcurrency } from "@/lib/concurrency";
 import { getSql } from "@/lib/db";
 import {
@@ -8,13 +8,6 @@ import {
   minimumTranscriptCharacters,
 } from "@/lib/digests/grounding";
 import { loadPrompt } from "@/lib/prompts";
-import { getPodcastCastForWeek } from "@/lib/podcasts/two-host";
-import { resolvePodcastScript } from "@/lib/podcasts/script-quality";
-import {
-  getPodcastAudioConfig,
-  getPodcastScriptConfig,
-} from "@/lib/podcasts/config";
-import { uploadGeneratedAsset } from "@/lib/supabase/storage";
 import {
   getSaturdayToFridayWeekRange,
   isWeeklyDigestReady,
@@ -153,72 +146,9 @@ export async function ensureWeeklyDigestForRange(input: {
     prompt,
     sourceDigestCount: daily.length,
   });
-  const cast = getPodcastCastForWeek(weekStart);
-  const scriptConfig = getPodcastScriptConfig();
-  const podcastPrompt = await loadPrompt("podcast_script");
-  let providerPodcastGeneration: Record<string, unknown> = {
-    status: "script_generated",
-    provider: "local",
-    model: "deterministic:two-host-builder",
-    generated_at: new Date().toISOString(),
-  };
-  let candidatePodcastScript: string | null = null;
-  if (scriptConfig.generationMode === "provider_script") {
-    try {
-      const providerScript = await generatePodcastScriptPayload({
-        creatorId: input.creatorId,
-        weekStart,
-        weekEnd,
-        weeklyDigest: generatedPayload,
-        sourceText,
-        prompt: podcastPrompt,
-        hostNames: cast.label,
-      });
-      candidatePodcastScript = providerScript.podcast_script;
-      providerPodcastGeneration = providerScript.podcast_generation;
-    } catch (error) {
-      console.warn("[podcast:provider-script-fallback]", {
-        creatorId: input.creatorId,
-        weekStart,
-        message: (error as Error).message,
-      });
-    }
-  }
-  const resolvedPodcastScript = resolvePodcastScript({
-    candidateScript: candidatePodcastScript,
-    candidateSource: "provider",
-    digest: generatedPayload,
-    config: scriptConfig,
-    cast,
-  });
-  if (resolvedPodcastScript.replacedShortScript) {
-    console.warn("[podcast:short-script-fallback]", {
-      creatorId: input.creatorId,
-      weekStart,
-      originalWordCount: resolvedPodcastScript.originalWordCount,
-      minimumWordCount: resolvedPodcastScript.minimumWordCount,
-    });
-  }
-  const podcastScript = resolvedPodcastScript.script;
   const payload = {
     ...generatedPayload,
     source_references: sourceReferences,
-    podcast_script: podcastScript,
-    podcast_generation: {
-      ...generatedPayload.podcast_generation,
-      ...providerPodcastGeneration,
-      status: resolvedPodcastScript.replacedShortScript
-        ? "script_generated_with_deterministic_fallback"
-        : providerPodcastGeneration.status,
-      target_minutes: scriptConfig.targetMinutes,
-      words_per_minute: scriptConfig.wordsPerMinute,
-      word_count: resolvedPodcastScript.wordCount,
-      minimum_word_count: resolvedPodcastScript.minimumWordCount,
-      script_source: resolvedPodcastScript.source,
-      original_word_count: resolvedPodcastScript.originalWordCount,
-      cast_id: cast.id,
-      source_references: sourceReferences,
-    },
   };
   const weeklyGrounding = payload.weekly_grounding;
 
@@ -233,19 +163,12 @@ export async function ensureWeeklyDigestForRange(input: {
         generation_model = ${weeklyGrounding.generation_model ?? null},
         generated_at = ${weeklyGrounding.generated_at ?? null},
         processing_status = 'digest_generated',
-        podcast_audio_asset_id = null,
-        podcast_status = 'pending',
-        podcast_generation_metadata = ${sql.json(toJsonParameter(payload.podcast_generation))},
-        podcast_generated_at = null,
-        podcast_model = null,
-        podcast_voice_config = null,
         source_references = ${sql.json(toJsonParameter(sourceReferences))},
         title = ${payload.title},
         newsletter_markdown = ${payload.newsletter_markdown},
         ranked_topics = ${sql.json(toJsonParameter(payload.ranked_topics))},
         what_changed = ${payload.what_changed},
         what_to_do_next = ${sql.json(toJsonParameter(payload.what_to_do_next))},
-        podcast_script = ${payload.podcast_script},
         full_digest_json = ${sql.json(toJsonParameter(payload))},
         updated_at = now()
       where id = ${existing[0].id}
@@ -264,15 +187,12 @@ export async function ensureWeeklyDigestForRange(input: {
       generation_model,
       generated_at,
       processing_status,
-      podcast_status,
-      podcast_generation_metadata,
       source_references,
       title,
       newsletter_markdown,
       ranked_topics,
       what_changed,
       what_to_do_next,
-      podcast_script,
       full_digest_json
     )
     values (
@@ -285,117 +205,18 @@ export async function ensureWeeklyDigestForRange(input: {
       ${weeklyGrounding.generation_model ?? null},
       ${weeklyGrounding.generated_at ?? null},
       'digest_generated',
-      'pending',
-      ${sql.json(toJsonParameter(payload.podcast_generation))},
       ${sql.json(toJsonParameter(sourceReferences))},
       ${payload.title},
       ${payload.newsletter_markdown},
       ${sql.json(toJsonParameter(payload.ranked_topics))},
       ${payload.what_changed},
       ${sql.json(toJsonParameter(payload.what_to_do_next))},
-      ${payload.podcast_script},
       ${sql.json(toJsonParameter(payload))}
     )
     on conflict (creator_id, week_start) do nothing
     returning id
   `;
-  const weeklyDigestId = rows[0]?.id;
-
-  if (weeklyDigestId && booleanEnv("GENERATE_AUDIO", false)) {
-    await maybeGeneratePodcastAudio({
-      creatorId: input.creatorId,
-      weeklyDigestId,
-      script: payload.podcast_script,
-      weekStart,
-    });
-  }
-
-  return weeklyDigestId ?? null;
-}
-
-async function maybeGeneratePodcastAudio(input: {
-  creatorId: string;
-  weeklyDigestId: string;
-  script: string;
-  weekStart: string;
-}) {
-  const sql = getSql();
-  const audioConfig = getPodcastAudioConfig();
-  if (audioConfig.provider !== "qwen_simple") {
-    console.info("[podcast:audio-skipped]", {
-      weeklyDigestId: input.weeklyDigestId,
-      provider: audioConfig.provider,
-      reason: "Use npm run podcasts:generate for full two-host podcast audio.",
-    });
-    return null;
-  }
-
-  const qwenKey = process.env.QWEN_API_KEY ?? process.env.DASHSCOPE_API_KEY;
-  if (!qwenKey || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return null;
-  }
-
-  const response = await fetch(
-    process.env.QWEN_TTS_ENDPOINT ?? "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
-    {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${qwenKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: audioConfig.ttsModel,
-        input: { text: input.script },
-      }),
-    },
-  );
-
-  if (!response.ok) return null;
-  const body = Buffer.from(await response.arrayBuffer());
-  const storagePath = `podcasts/${input.creatorId}/${input.weekStart}.bin`;
-  const publicUrl = await uploadGeneratedAsset({
-    path: storagePath,
-    contentType: response.headers.get("content-type") ?? "application/octet-stream",
-    body,
-  });
-  const assets = await sql<{ id: string }[]>`
-    insert into assets (
-      creator_id,
-      weekly_digest_id,
-      asset_type,
-      provider,
-      model,
-      prompt,
-      storage_path,
-      public_url
-    )
-    values (
-      ${input.creatorId},
-      ${input.weeklyDigestId},
-      'podcast_audio',
-      'qwen',
-      ${audioConfig.ttsModel},
-      ${input.script.slice(0, 2000)},
-      ${storagePath},
-      ${publicUrl}
-    )
-    on conflict (storage_path) do update set
-      creator_id = excluded.creator_id,
-      weekly_digest_id = excluded.weekly_digest_id,
-      asset_type = excluded.asset_type,
-      provider = excluded.provider,
-      model = excluded.model,
-      prompt = excluded.prompt,
-      public_url = excluded.public_url,
-      created_at = now()
-    returning id
-  `;
-  await sql`
-    update weekly_digests
-    set podcast_audio_asset_id = ${assets[0].id}, updated_at = now()
-    where id = ${input.weeklyDigestId}
-  `;
-  return assets[0].id;
+  return rows[0]?.id ?? null;
 }
 
 function toJsonParameter(value: unknown) {

@@ -9,4 +9,3 @@
 - [Digest Operations](operations.md)
 - [Daily Digest Grounding Incident: 2026-05-09](daily-digest-grounding-incident-2026-05-09.md)
 - [Cron Ingestion Investigation: 2026-05-13](cron-ingestion-investigation-2026-05-13.md)
-- [Daily, Weekly, and Podcast Audit: 2026-05-16](daily-weekly-podcast-audit-2026-05-16.md)

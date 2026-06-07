@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CalendarDays, RotateCcw } from "lucide-react";
+import { DateKeyboardNavigation } from "@/components/date-keyboard-navigation";
 import { DigestRenderer } from "@/components/digest-renderer";
 import { requireUser } from "@/lib/auth/current-user";
 import { getCatalogStartDate } from "@/lib/catalog";
@@ -45,6 +46,14 @@ export default async function DailyPage({
   const availableDates = [...new Set(digests.map((digest) => digest.digest_date))];
   const selectedDate = params.date ?? availableDates[0] ?? new Date().toISOString().slice(0, 10);
   const today = new Date().toISOString().slice(0, 10);
+  const previousDateHref = buildDigestHref("/app/daily", {
+    creatorId,
+    date: shiftIsoDate(selectedDate, -1),
+  });
+  const nextDateHref = buildDigestHref("/app/daily", {
+    creatorId,
+    date: shiftIsoDate(selectedDate, 1),
+  });
   const picker = getDailyVideoPickerState(digests, selectedDate);
   const selected = selectDailyDigestForDate(
     digests,
@@ -58,6 +67,7 @@ export default async function DailyPage({
 
   return (
     <div className="space-y-6">
+      <DateKeyboardNavigation previousHref={previousDateHref} nextHref={nextDateHref} />
       <section className="ink-panel">
         <div className="mb-4 border-b border-slate-200 pb-4">
           <h1 className="text-xl font-black text-slate-950">Daily digest preview</h1>
@@ -125,6 +135,20 @@ export default async function DailyPage({
       )}
     </div>
   );
+}
+
+function buildDigestHref(pathname: string, params: Record<string, string>) {
+  const query = new URLSearchParams(params);
+  return `${pathname}?${query.toString()}`;
+}
+
+function shiftIsoDate(dateString: string, days: number) {
+  const date = new Date(`${dateString}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    return new Date().toISOString().slice(0, 10);
+  }
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function BlockedDailyDigest({ digest }: { digest: DailyRow }) {
