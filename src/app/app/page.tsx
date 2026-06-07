@@ -50,7 +50,7 @@ export default async function AppHome() {
             </h2>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
               Paste a creator URL, keep the March 2026 catalog current, and read archived
-              daily, weekly, and podcast editions that separate source-backed claims from uncertainty.
+              daily and weekly editions that separate source-backed claims from uncertainty.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link className="btn-primary" href="/app/creators">
@@ -135,8 +135,7 @@ export default async function AppHome() {
           <p className="mt-2 text-2xl font-black text-slate-950">Source-grounded editions</p>
           <p className="mt-3 text-sm leading-6 text-slate-600">
             Daily and weekly views preserve the same records while giving you controls for
-            dates, Saturday-through-Friday weeks, explanation depth, podcast scripts, and
-            operational refreshes.
+            dates, Saturday-through-Friday weeks, explanation depth, and operational refreshes.
           </p>
           <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
             <div

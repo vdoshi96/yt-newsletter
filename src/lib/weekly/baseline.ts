@@ -119,7 +119,6 @@ async function ensureBaselineWeekDigest(
         ranked_topics = ${sql.json(toJsonParameter(payloadWithReferences.ranked_topics))},
         what_changed = ${payloadWithReferences.what_changed},
         what_to_do_next = ${sql.json(toJsonParameter(payloadWithReferences.what_to_do_next))},
-        podcast_script = ${payloadWithReferences.podcast_script},
         full_digest_json = ${sql.json(toJsonParameter(payloadWithReferences))},
         updated_at = now()
       where id = ${existingId}
@@ -144,7 +143,6 @@ async function ensureBaselineWeekDigest(
       ranked_topics,
       what_changed,
       what_to_do_next,
-      podcast_script,
       full_digest_json
     )
     values (
@@ -163,7 +161,6 @@ async function ensureBaselineWeekDigest(
       ${sql.json(toJsonParameter(payloadWithReferences.ranked_topics))},
       ${payloadWithReferences.what_changed},
       ${sql.json(toJsonParameter(payloadWithReferences.what_to_do_next))},
-      ${payloadWithReferences.podcast_script},
       ${sql.json(toJsonParameter(payloadWithReferences))}
     )
     returning id
@@ -223,8 +220,6 @@ function createEmptyWeekPayload(window: BaselineWeekWindow) {
       "Use the daily digests from this week once available.",
       "Prefer free official docs, papers, and small projects before optional paid resources.",
     ],
-    podcast_script:
-      "This baseline week does not have source-backed podcast material yet because no daily digests were available.",
   };
 }
 

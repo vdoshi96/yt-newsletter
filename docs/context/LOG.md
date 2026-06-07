@@ -1,24 +1,28 @@
 # Log
 
+## 2026-06-07 Weekly Podcast Retirement and Date Keyboard Navigation
+
+Retired the weekly podcast feature and pipeline. Removed the podcast page, app navigation item, Vercel cron route, generation scripts, prompt, TTS/audio upload code, Supabase Storage dependency path, and podcast-specific tests. Daily and weekly digest views now support left/right arrow-key date navigation when focus is not inside a form control.
+
 ## 2026-05-27 Catalog Boundary and Backlog Recovery
 
-Added a durable `CATALOG_START_DATE=2026-03-01` boundary so daily views, weekly generation/archive selection, and podcast generation ignore older seeded or experimental rows. Production podcast cron keeps bounded batch support but defaults to one episode per invocation to fit the Vercel route budget while preserving local backfill batch overrides.
+Added a durable `CATALOG_START_DATE=2026-03-01` boundary so daily views and weekly generation/archive selection ignore older seeded or experimental rows.
 
 ## 2026-05-26 Daily Ingestion Reliability Follow-Up
 
 Implemented the consensus reliability path from the model review notes: transcript waits can recover immediately when a completed `youtube_transcript_free` row exists, hourly transcript retries shift to an extended cadence instead of producing final content, transcript fetches have a configurable timeout, stale `processing` rows are bounded by the retry budget, and queue scans log candidate counts by status. Added `npm run ingest:recover` as a dry-run-first command for wedged transcript rows and moved weekly generation fully behind the dedicated weekly cron so daily discovery/processing budgets stay focused on daily availability.
 
-Follow-up recovery hardening: collapsed duplicate open ingest rows before adding the partial unique index `ingest_job_items_one_open_item_per_video_idx`, changed ingest job creation to ignore an already-open video item across jobs, prioritized completed/due transcript waits before stale queued backlog, and expanded `npm run ingest:recover` to detect fetchable waiting rows and duplicate open rows. Added bounded worker-pool execution for daily ingest processing, weekly digest refreshes, and podcast generation through `INGEST_PROCESS_CONCURRENCY`, `WEEKLY_DIGEST_CONCURRENCY`, and `PODCAST_GENERATION_CONCURRENCY`, keeping provider rate-limit pressure configurable while allowing back-catalog batches to finish faster.
+Follow-up recovery hardening: collapsed duplicate open ingest rows before adding the partial unique index `ingest_job_items_one_open_item_per_video_idx`, changed ingest job creation to ignore an already-open video item across jobs, prioritized completed/due transcript waits before stale queued backlog, and expanded `npm run ingest:recover` to detect fetchable waiting rows and duplicate open rows. Added bounded worker-pool execution for daily ingest processing and weekly digest refreshes through `INGEST_PROCESS_CONCURRENCY` and `WEEKLY_DIGEST_CONCURRENCY`, keeping provider rate-limit pressure configurable while allowing back-catalog batches to finish faster.
 
 ## 2026-05-16 Editorial Quality + DeepSeek V4 Pro Pass
 
-Resolved stale Claude worktrees/branches after preserving patch evidence outside the repo. Verified the official DeepSeek V4 Pro docs and switched the app's high-quality generation route from compatibility aliases to `deepseek-v4-pro` with thinking enabled, longer DeepSeek timeout, no default app-level daily/weekly output cap, explicit retry-before-fallback behavior, response-body error logging, and model/attempt logs. Daily digest rendering now removes the redundant CS-background panel, breaks long sections into paragraphs, hides timestamp-heavy transcript excerpt lists, and keeps transcript grounding to status, transcript source, and model used. Weekly digest rendering now hides weekly post cards/source notes, jumps to the latest published completed week, and has an explicit Saturday cron route. Podcast pages hide operational stats, and scripts use human host names (Maya/Theo and Nina/Jonah) with DeepSeek provider-authored scripts as the default path. Dashboard daily count now reflects recent grounded long-form digests rather than all historical rows.
+Resolved stale Claude worktrees/branches after preserving patch evidence outside the repo. Verified the official DeepSeek V4 Pro docs and switched the app's high-quality generation route from compatibility aliases to `deepseek-v4-pro` with thinking enabled, longer DeepSeek timeout, no default app-level daily/weekly output cap, explicit retry-before-fallback behavior, response-body error logging, and model/attempt logs. Daily digest rendering now removes the redundant CS-background panel, breaks long sections into paragraphs, hides timestamp-heavy transcript excerpt lists, and keeps transcript grounding to status, transcript source, and model used. Weekly digest rendering now hides weekly post cards/source notes, jumps to the latest published completed week, and has an explicit Saturday cron route. Dashboard daily count now reflects recent grounded long-form digests rather than all historical rows.
 
 ## 2026-05-16 Daily Digest Retry Fix
 
 User reported daily digests still were not being generated after the recent ingest fixes. Reviewing PRs showed #1 intended freshness/discovery recovery, #2 enforced transcript-only daily grounding, and #3 hardened back-catalog/idempotency/retry behavior. Live DB evidence showed recent long-form uploads were discovered and queued, but stuck in `waiting_for_transcript` with 24-hour `retry_after` values even though `youtube-transcript` could fetch those transcripts now. Fixed transcript retries to default to hourly `TRANSCRIPT_RETRY_MINUTES`, recover legacy future `retry_after` waits after the shorter window, track transcript-missing attempts with a separate default budget (`TRANSCRIPT_MAX_RETRY_ATTEMPTS=48`), prioritize fresh videos, skip non-main/short videos terminally, and normalize harmless model `layout_type` variants before daily schema validation. A live one-item processor run generated the 2026-05-15 daily digest from a 17,723-character `youtube_transcript_free` transcript using `qwen:qwen3-max`.
 
-Follow-up completion: regenerated and audited all main long-form daily digests from 2026-05-01 through 2026-05-16, each with full beginner/intermediate/advanced digest versions. Regenerated the completed May-covering weekly windows (`2026-04-25`, `2026-05-02`, `2026-05-09`) with DeepSeek first, source references, and long-form podcast scripts. Generated and QA-passed Gemini MP3 podcasts for all three completed windows. See [Daily, Weekly, and Podcast Audit: 2026-05-16](../wiki/daily-weekly-podcast-audit-2026-05-16.md).
+Follow-up completion: regenerated and audited all main long-form daily digests from 2026-05-01 through 2026-05-16, each with full beginner/intermediate/advanced digest versions. Regenerated the completed May-covering weekly windows (`2026-04-25`, `2026-05-02`, `2026-05-09`) with DeepSeek first and source references. The weekly podcast assets from that period were later retired.
 
 ## 2026-05-13 Ingest Retry Mechanism
 
@@ -48,9 +52,9 @@ Confirmed protected tabs appeared to kick users out because the app shell render
 
 Added beginner, intermediate, and advanced explanation levels to daily and weekly digest JSON contracts. Daily and weekly pages now show a Level dropdown, and weekly synthesis source text carries all three daily explanation levels forward so weekly digests can summarize at each reader level.
 
-## 2026-05-09 Two-Host Qwen Podcasts
+## 2026-05-09 Retired Two-Host Qwen Podcast Experiment
 
-Added `npm run podcasts:generate` to create two-host weekly podcast MP3s with Qwen voice design/TTS, using generic British-accented female and American-accented male host descriptions instead of cloning or imitating real people. Generated and attached four live podcast audio assets for the Nate B. Jones baseline weeks.
+Added an early two-host audio experiment. This path was retired on 2026-06-07.
 
 ## 2026-05-09 Weekly Archive Rework
 
@@ -60,17 +64,15 @@ Reworked weekly digests from a latest-four recap into a stored "This Week in AI"
 
 Fixed daily "follow-up from yesterday" continuity. Daily generation now receives prior-digest context and stores a deterministic source-backed bridge to the nearest previous daily digest. Added `npm run daily:refresh-follow-ups` and refreshed the live starter daily rows.
 
-## 2026-05-09 Freshness, Podcast, and Calendar Fixes
+## 2026-05-09 Freshness and Calendar Fixes
 
 Updated creator discovery to run hourly, queue previously missed known videos, and log discovery, transcript, summarization, DB write, and UI availability stages. The admin manual refresh now discovers uploads before processing the queue.
 
-Reworked weekly podcast scripts into longer two-host deep dives with configurable target length and TTS settings. Documented that NotebookLM remains a manual external option because there is no stable app API for automated generation.
+Added weekly calendar navigation for weekly digest pages, daily/weekly "Jump to current" controls, weekly story links to matching daily digest dates, source-note panel removal, skepticism wording cleanup, deeper explanation prompt instructions, follow-up overflow hardening, and weekly markdown artifact cleanup.
 
-Added weekly calendar navigation for weekly digest and podcast pages, daily/weekly/podcast "Jump to current" controls, weekly story links to matching daily digest dates, source-note panel removal, skepticism wording cleanup, deeper explanation prompt instructions, follow-up overflow hardening, and weekly markdown artifact cleanup.
+## 2026-05-09 Retired Gemini Podcast Host Experiment
 
-## 2026-05-09 Gemini Podcast Hosts
-
-Switched the automated high-quality podcast path to Gemini Flash native multi-speaker TTS by default. Weekly casts now rotate between Puck/Kora and Achird/Silafat, and generated scripts open with host introductions and a little source-grounded podcast banter before moving into the digest analysis. The Qwen voice-design path remains available as an explicit provider.
+Switched the old automated podcast experiment to Gemini Flash native multi-speaker TTS. This path was retired on 2026-06-07.
 
 ## 2026-05-09 Daily Digest Grounding Incident
 

@@ -1,8 +1,4 @@
-import {
-  dailyDigestSchema,
-  weeklyDigestSchema,
-  type WeeklyDigestPayload,
-} from "@/lib/digests/schemas";
+import { dailyDigestSchema, weeklyDigestSchema } from "@/lib/digests/schemas";
 import { normalizeDailyDigestModelPayload } from "@/lib/ai/daily-payload";
 import { callChatProvider } from "@/lib/ai/providers";
 import { parseJsonFromModel } from "@/lib/ai/json";
@@ -153,7 +149,6 @@ export async function generateWeeklyDigestPayload(input: {
         const parsed = weeklyDigestSchema.parse({
           ...parseJsonFromModel<Record<string, unknown>>(result.text),
           weekly_grounding: undefined,
-          podcast_generation: undefined,
         });
         assertWeeklyDigestGrounding({
           sourceText: input.sourceText,
@@ -192,91 +187,6 @@ export async function generateWeeklyDigestPayload(input: {
     sourceText: input.sourceText,
     sourceDigestCount: input.sourceDigestCount,
   });
-}
-
-export async function generatePodcastScriptPayload(input: {
-  creatorId: string;
-  weekStart: string;
-  weekEnd: string;
-  weeklyDigest: WeeklyDigestPayload;
-  sourceText: string;
-  prompt: string;
-  hostNames?: string;
-}) {
-  const messages: ChatMessage[] = [
-    {
-      role: "system",
-      content:
-        "You are a senior podcast producer and technology editor. Return strict JSON only. Write natural spoken language from the supplied grounded weekly digest and transcript-derived source material.",
-    },
-    {
-      role: "user",
-      content: [
-        input.prompt,
-        "",
-        `WEEK: ${input.weekStart} to ${input.weekEnd}`,
-        `HOSTS: ${input.hostNames ?? "Maya and Theo"}`,
-        "",
-        "WEEKLY DIGEST JSON:",
-        JSON.stringify(input.weeklyDigest),
-        "",
-        "SOURCE DIGESTS AND TRANSCRIPT-DERIVED RHYTHM SAMPLES:",
-        input.sourceText,
-      ].join("\n"),
-    },
-  ];
-
-  const route: ProviderRouteOption[] = [
-    {
-      provider: "deepseek",
-      model: process.env.DEEPSEEK_PODCAST_MODEL ?? "deepseek-v4-pro",
-      attempts: numberEnv("DEEPSEEK_PODCAST_MAX_ATTEMPTS", 2),
-      maxTokens: numberEnv("PODCAST_SCRIPT_MAX_OUTPUT_TOKENS", 24_000),
-      reasoningEffort: parseDeepSeekReasoningEffort(process.env.DEEPSEEK_PODCAST_REASONING_EFFORT),
-    },
-    {
-      provider: "kimi",
-      model: process.env.KIMI_PODCAST_MODEL ?? "moonshot-v1-32k",
-      attempts: numberEnv("KIMI_PODCAST_MAX_ATTEMPTS", 1),
-      maxTokens: numberEnv("PODCAST_SCRIPT_MAX_OUTPUT_TOKENS", 24_000),
-    },
-  ];
-
-  const failures: string[] = [];
-  for (const option of route) {
-    for (let attempt = 1; attempt <= option.attempts; attempt += 1) {
-      try {
-        const result = await runProviderRoute({
-          label: "Podcast script",
-          option,
-          attempt,
-          messages,
-          taskType: "podcast_script",
-          creatorId: input.creatorId,
-        });
-        const parsed = parseJsonFromModel<Record<string, unknown>>(result.text);
-        const script = typeof parsed.podcast_script === "string" ? parsed.podcast_script.trim() : "";
-        if (!script) throw new Error("Podcast script payload did not include podcast_script.");
-        return {
-          podcast_script: script,
-          podcast_generation: {
-            status: "script_generated",
-            provider: option.provider,
-            model: option.model,
-            generated_at: new Date().toISOString(),
-          },
-        };
-      } catch (error) {
-        const message = (error as Error).message;
-        failures.push(`${option.provider}:${option.model}: attempt ${attempt}: ${message}`);
-        console.warn(
-          `Podcast script provider failed: provider=${option.provider} model=${option.model} attempt=${attempt}/${option.attempts} message=${message}`,
-        );
-      }
-    }
-  }
-
-  throw new Error(`Podcast script generation failed for all providers: ${failures.join(" | ")}`);
 }
 
 type ProviderRouteOption = {
@@ -417,7 +327,7 @@ function buildSourceBackedWeeklyFallback(input: {
         evidence: itemLabels.slice(0, 6),
         implications: [
           "Use the theme to pick one practical experiment rather than treating the week as a complete market survey.",
-          "Keep the daily transcript anchors attached when reusing the weekly synthesis in a podcast or dashboard.",
+          "Keep the daily transcript anchors attached when reusing the weekly synthesis in a dashboard.",
         ],
         uncertainty:
           "This fallback does not include independent external research, so surrounding news context should be added only from verified sources.",
@@ -471,8 +381,6 @@ function buildSourceBackedWeeklyFallback(input: {
       "Pick one recurring concept and review free official docs or examples related to it.",
       "Write down what evidence would be needed before turning the weekly theme into a recommendation.",
     ],
-    podcast_script:
-      `This week covers ${primaryTheme.toLowerCase()} using only regenerated daily digests and transcript-backed source notes.`,
   });
 }
 
@@ -603,7 +511,7 @@ function rankFallbackThemes(items: ParsedWeeklySourceItem[]) {
 function buildFallbackTakeaways(primaryTheme: string) {
   return [
     `Use ${primaryTheme.toLowerCase()} as a prompt for one small experiment, not as a broad forecast.`,
-    "Keep daily transcript anchors attached when turning the weekly synthesis into a memo or podcast.",
+    "Keep daily transcript anchors attached when turning the weekly synthesis into a memo or dashboard.",
     "Separate practical workflow advice from claims that would require external verification.",
     "Regenerate the week later if provider-backed weekly research becomes available.",
   ];

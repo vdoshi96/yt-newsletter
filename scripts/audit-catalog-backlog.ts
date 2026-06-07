@@ -8,7 +8,6 @@ import { getCatalogFirstWeeklyStart, getCatalogStartDate } from "@/lib/catalog";
 import {
   getSaturdayToFridayWeekRange,
   isWeeklyDigestReady,
-  isWeeklyPodcastReady,
 } from "@/lib/weekly/week-range";
 
 const args = new Set(process.argv.slice(2));
@@ -84,11 +83,7 @@ async function main() {
         generation_model,
         grounding_status,
         processing_status,
-        source_digest_count,
-        podcast_status,
-        podcast_audio_asset_id::text,
-        podcast_model,
-        podcast_generation_metadata->'audio_qa'->>'status' as audio_qa_status
+        source_digest_count
       from weekly_digests
       where creator_id = ${creator.id}
         and week_start >= ${firstWeeklyStart}::date
@@ -105,16 +100,7 @@ async function main() {
         row.generation_model.startsWith("local:")
       ),
     );
-    const missingPodcasts = weeklyRows.filter((row) =>
-      expectedWeeks.has(row.week_start) &&
-      isWeeklyPodcastReady({ weekStart: row.week_start, weekEnd: row.week_end }, now) &&
-      (
-        !row.podcast_audio_asset_id ||
-        !isGeneratedPodcastStatus(row.podcast_status) ||
-        row.audio_qa_status !== "passed"
-      ),
-    );
-    issueCount += missingDaily.length + missingWeekly.length + weakWeekly.length + missingPodcasts.length;
+    issueCount += missingDaily.length + missingWeekly.length + weakWeekly.length;
     console.log(JSON.stringify({
       creator: creator.title ?? creator.id,
       catalogStart,
@@ -126,17 +112,12 @@ async function main() {
       weeklyRows: weeklyRows.length,
       missingWeekly,
       weakWeekly: weakWeekly.map(formatWeeklyRow),
-      missingOrFailedPodcasts: missingPodcasts.map(formatPodcastRow),
     }, null, 2));
   }
 
   if (strict && issueCount > 0) {
     throw new Error(`Catalog backlog audit found ${issueCount} issue(s).`);
   }
-}
-
-function isGeneratedPodcastStatus(status: string | null) {
-  return status === "generated" || status === "podcast_generated";
 }
 
 type MissingDailyRow = {
@@ -156,10 +137,6 @@ type WeeklyAuditRow = {
   grounding_status: string | null;
   processing_status: string | null;
   source_digest_count: number | null;
-  podcast_status: string | null;
-  podcast_audio_asset_id: string | null;
-  podcast_model: string | null;
-  audio_qa_status: string | null;
 };
 
 function formatWeeklyRow(row: WeeklyAuditRow) {
@@ -167,15 +144,6 @@ function formatWeeklyRow(row: WeeklyAuditRow) {
     week_start: row.week_start,
     generation_model: row.generation_model,
     source_digest_count: row.source_digest_count,
-  };
-}
-
-function formatPodcastRow(row: WeeklyAuditRow) {
-  return {
-    week_start: row.week_start,
-    podcast_status: row.podcast_status,
-    audio_qa_status: row.audio_qa_status,
-    podcast_model: row.podcast_model,
   };
 }
 

@@ -27,18 +27,6 @@ describe("dashboard counts and weekly scheduling", () => {
     expect(route).toContain("maxDuration");
   });
 
-  it("has a scheduled podcast audio cron route that retries missing or failed audio", () => {
-    const vercel = readRepoFile("vercel.json");
-    const route = readRepoFile("src/app/api/cron/generate-weekly-podcast/route.ts");
-    const generator = readRepoFile("src/lib/podcasts/generate-audio.ts");
-
-    expect(vercel).toContain("/api/cron/generate-weekly-podcast");
-    expect(route).toContain("generateDueWeeklyPodcasts");
-    expect(route).toContain("maxDuration");
-    expect(generator).toContain("podcast_status === \"failed\"");
-    expect(generator).toContain("contentType: \"audio/wav\"");
-  });
-
   it("keeps weekly generation out of daily discovery and process cron paths", () => {
     const processor = readRepoFile("src/lib/processor.ts");
     const processRoute = readRepoFile("src/app/api/cron/process-ingest/route.ts");
@@ -65,5 +53,13 @@ describe("dashboard counts and weekly scheduling", () => {
     expect(weeklyPage).toContain("latestPublishedWeekStart");
     expect(weeklyPage).toContain("Jump to latest published");
     expect(weeklyPage).not.toContain("Jump to current");
+  });
+
+  it("keeps the weekly podcast cron retired", () => {
+    const vercel = readRepoFile("vercel.json");
+    const nav = readRepoFile("src/components/app-nav.tsx");
+
+    expect(vercel).not.toContain("/api/cron/generate-weekly-podcast");
+    expect(nav).not.toContain("/app/podcasts");
   });
 });

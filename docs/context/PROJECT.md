@@ -12,7 +12,6 @@ The reader is smart, not a programmer, and wants plain-English AI/topic explanat
 - TypeScript
 - Tailwind CSS
 - Supabase Postgres
-- Supabase Storage
 - Custom username/password auth
 - Vercel Cron
 - Server-only AI calls

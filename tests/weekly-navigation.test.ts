@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  getCurrentSundayWeekStart,
   resolveSelectedWeekStart,
 } from "../src/lib/weekly/navigation";
 
@@ -18,6 +17,5 @@ describe("weekly calendar navigation", () => {
     expect(resolveSelectedWeekStart("2026-05-09", [], new Date("2026-05-10T12:00:00Z"))).toBe(
       "2026-05-09",
     );
-    expect(getCurrentSundayWeekStart(new Date("2026-05-09T12:00:00Z"))).toBe("2026-05-09");
   });
 });

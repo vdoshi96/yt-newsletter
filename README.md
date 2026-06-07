@@ -1,6 +1,6 @@
 # yt-newsletter
 
-A private Next.js App Router dashboard that turns YouTube creator uploads into grounded daily newspaper-style digests, weekly newsletters, and optional weekly podcast audio.
+A private Next.js App Router dashboard that turns YouTube creator uploads into grounded daily newspaper-style digests and weekly newsletters.
 
 Daily and weekly digests include beginner, intermediate, and advanced explanation levels. The beginner level is written for a layperson with no coding experience or computer science background.
 
@@ -9,9 +9,8 @@ Daily and weekly digests include beginner, intermediate, and advanced explanatio
 - Next.js App Router, TypeScript, Tailwind CSS
 - Custom username/password auth with Argon2id and HTTP-only cookies
 - Supabase Postgres for app data
-- Supabase Storage for generated podcast/image assets
 - Vercel Cron-compatible queue endpoints
-- Server-side AI provider routing for DeepSeek, Qwen/DashScope, Kimi, and Gemini
+- Server-side AI provider routing for DeepSeek, Qwen/DashScope, and Kimi
 
 ## Local Setup
 
@@ -28,36 +27,28 @@ Open `http://localhost:3000`.
 
 `npm run env:setup` validates required variable names and appends generated local secrets/defaults to `.env.local`. It never prints secret values.
 
-## Supabase Setup
+## Database Setup
 
-1. Create a Supabase project.
+1. Create a Supabase project or another Postgres database.
 2. Put the database connection string in `.env.local` as `DATABASE_URL`.
-3. Add the Supabase API values:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-4. Apply the schema:
+3. Apply the schema:
 
 ```bash
 npm run db:migrate
 ```
 
-The migration creates the requested app tables, enables RLS to avoid accidental public Supabase API access, and creates the `yt-newsletter-assets` Storage bucket.
+The migration creates the requested app tables and enables RLS to avoid accidental public Supabase API access.
 
 ## Environment
 
 Use `.env.example` as the template. Required external-account values:
 
 ```text
-NEXT_PUBLIC_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-SUPABASE_SERVICE_ROLE_KEY
 YOUTUBE_API_KEY
 DEEPSEEK_API_KEY
 KIMI_API_KEY
 QWEN_API_KEY
 DASHSCOPE_API_KEY
-GEMINI_API_KEY
 FIRST_ADMIN_USERNAME
 FIRST_ADMIN_PASSWORD
 ```
@@ -69,7 +60,6 @@ CRON_SECRET
 COOKIE_SECRET
 APP_ENV
 NEXT_PUBLIC_APP_URL
-SUPABASE_STORAGE_BUCKET
 MONTHLY_AI_BUDGET_USD
 AI_PROVIDER_TIMEOUT_MS
 DEEPSEEK_PROVIDER_TIMEOUT_MS
@@ -82,10 +72,9 @@ TRANSCRIPT_MAX_RETRY_ATTEMPTS
 TRANSCRIPT_EXTENDED_RETRY_SECONDS
 TRANSCRIPT_FETCH_TIMEOUT_MS
 GENERATE_IMAGES
-GENERATE_AUDIO
 DEEPSEEK_DAILY_MODEL
 QWEN_DAILY_FALLBACK_MODEL
-DEEPSEEK_WEEKLY_FALLBACK_MODEL
+DEEPSEEK_WEEKLY_MODEL
 KIMI_WEEKLY_MODEL
 WEEKLY_AI_MAX_OUTPUT_TOKENS
 ```
@@ -140,10 +129,9 @@ npm run ingest:process
 npm run ingest:recover -- --dry-run
 npm run daily:refresh-follow-ups
 npm run weekly:refresh-research
-npm run podcasts:generate
 ```
 
-`npm run ingest:recover` is dry-run first and reports wedged transcript candidates. Re-run with `--apply` only after reviewing the counts. `npm run daily:refresh-follow-ups` rebuilds stored daily "follow-up from yesterday" text from the nearest prior daily digest for each creator. `npm run weekly:refresh-research` refreshes the starter weekly archive with date-scoped research notes and richer "This Week in AI" sections. `npm run podcasts:generate` creates two-host weekly podcast audio for finalized grounded weekly digests, then uploads it to Supabase Storage.
+`npm run ingest:recover` is dry-run first and reports wedged transcript candidates. Re-run with `--apply` only after reviewing the counts. `npm run daily:refresh-follow-ups` rebuilds stored daily "follow-up from yesterday" text from the nearest prior daily digest for each creator. `npm run weekly:refresh-research` refreshes the starter weekly archive with date-scoped research notes and richer "This Week in AI" sections.
 
 Protected endpoint:
 
@@ -159,7 +147,6 @@ Configured in `vercel.json`:
 - `/api/cron/process-ingest` every 5 minutes
 - `/api/cron/check-creators` hourly
 - `/api/cron/generate-weekly-digest` weekly on Saturday
-- `/api/cron/generate-weekly-podcast` daily
 
 All cron routes require `CRON_SECRET` via `Authorization: Bearer ...`, `x-cron-secret`, or `?secret=...`.
 
@@ -169,16 +156,12 @@ If using the Vercel CLI:
 
 ```bash
 vercel link
-vercel env add NEXT_PUBLIC_SUPABASE_URL production
-vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
-vercel env add SUPABASE_SERVICE_ROLE_KEY production
 vercel env add DATABASE_URL production
 vercel env add YOUTUBE_API_KEY production
 vercel env add DEEPSEEK_API_KEY production
 vercel env add KIMI_API_KEY production
 vercel env add QWEN_API_KEY production
 vercel env add DASHSCOPE_API_KEY production
-vercel env add GEMINI_API_KEY production
 vercel env add FIRST_ADMIN_USERNAME production
 vercel env add FIRST_ADMIN_PASSWORD production
 vercel env add CRON_SECRET production

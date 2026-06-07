@@ -113,7 +113,7 @@ describe("digest schemas", () => {
     expect(parsed.full_level_versions.advanced).toContain("Level 3 explanation unavailable");
   });
 
-  it("accepts a weekly newsletter payload with a podcast script", () => {
+  it("accepts a weekly newsletter payload", () => {
     const parsed = weeklyDigestSchema.parse({
       title: "This week in practical AI",
       newsletter_markdown: "# This week\n\nA grounded recap.",
@@ -155,10 +155,8 @@ describe("digest schemas", () => {
       what_changed: "More emphasis on evaluation.",
       what_to_do_next: ["Run a small free experiment."],
       free_learning_plan: ["Read free docs."],
-      podcast_script: "Welcome back. This week...",
     });
 
-    expect(parsed.podcast_script).toContain("This week");
     expect(parsed.explanation_levels.intermediate).toContain("agent");
     expect(parsed.weekly_posts).toHaveLength(10);
     expect(parsed.research_briefs[0].title).toBe("Inference economics");
@@ -172,7 +170,6 @@ describe("digest schemas", () => {
       what_changed: "The focus shifted.",
       what_to_do_next: [],
       free_learning_plan: [],
-      podcast_script: "This week...",
     });
 
     expect(parsed.ranked_topics[0].importance_score).toBe(0.85);
@@ -205,7 +202,6 @@ describe("digest schemas", () => {
       what_changed: "The focus shifted.",
       what_to_do_next: [],
       free_learning_plan: [],
-      podcast_script: "This week...",
     });
 
     expect(parsed.weekly_posts[0].source_url).toBeUndefined();
@@ -213,7 +209,7 @@ describe("digest schemas", () => {
     expect(parsed.research_briefs[0].implications).toEqual(["Track unit costs."]);
   });
 
-  it("normalizes weekly provider list fields and defaults the deterministic podcast script", () => {
+  it("normalizes weekly provider list fields", () => {
     const parsed = weeklyDigestSchema.parse({
       title: "This week in AI",
       newsletter_markdown: "# Week",
@@ -227,6 +223,5 @@ describe("digest schemas", () => {
     expect(parsed.board_level_implications).toEqual(["Ask for review ownership."]);
     expect(parsed.what_to_do_next).toEqual(["Run a small reversible test."]);
     expect(parsed.free_learning_plan).toEqual(["Read free documentation."]);
-    expect(parsed.podcast_script).toBe("Pending deterministic podcast script.");
   });
 });

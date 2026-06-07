@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Headphones, Home, Newspaper, Settings, Users, Workflow } from "lucide-react";
+import { CalendarDays, Home, Newspaper, Settings, Users, Workflow } from "lucide-react";
 
 const navItems = [
   { href: "/app", label: "Home", icon: Home },
   { href: "/app/creators", label: "Creators", icon: Users },
   { href: "/app/daily", label: "Daily", icon: Newspaper },
   { href: "/app/weekly", label: "Weekly", icon: CalendarDays },
-  { href: "/app/podcasts", label: "Podcasts", icon: Headphones },
   { href: "/app/jobs", label: "Jobs", icon: Workflow },
   { href: "/app/settings", label: "Settings", icon: Settings },
 ];

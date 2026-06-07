@@ -37,14 +37,10 @@ describe("editorial output safeguards", () => {
     expect(weeklyPage).not.toContain("parsed.source_notes.map");
   });
 
-  it("removes operational podcast stats from the listener-facing page", () => {
-    const podcastsPage = readRepoFile("src/app/app/podcasts/page.tsx");
-    const article = podcastsPage.slice(podcastsPage.indexOf("function PodcastArticle"));
+  it("keeps the retired podcast page out of the app nav", () => {
+    const nav = readRepoFile("src/components/app-nav.tsx");
 
-    expect(article).not.toContain("Audio QA");
-    expect(article).not.toContain("Script target");
-    expect(article).not.toContain("Voice/model");
-    expect(article).not.toContain("formatStatus");
-    expect(article).not.toContain("formatDuration");
+    expect(nav).not.toContain("Headphones");
+    expect(nav).not.toContain("/app/podcasts");
   });
 });

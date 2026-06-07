@@ -94,17 +94,14 @@ describe("ingestion idempotency SQL safeguards", () => {
     expect(script).toContain("duplicate_open_ingest_collapsed");
   });
 
-  it("uses bounded concurrency for batch daily, weekly, and podcast generation", () => {
+  it("uses bounded concurrency for batch daily and weekly generation", () => {
     const processor = readFileSync(join(process.cwd(), "src/lib/processor.ts"), "utf8");
     const weekly = readFileSync(join(process.cwd(), "src/lib/weekly/generate.ts"), "utf8");
-    const podcasts = readFileSync(join(process.cwd(), "src/lib/podcasts/generate-audio.ts"), "utf8");
 
     expect(processor).toContain("INGEST_PROCESS_CONCURRENCY");
     expect(processor).toContain("runBoundedConcurrency(items");
     expect(weekly).toContain("WEEKLY_DIGEST_CONCURRENCY");
     expect(weekly).toContain("runBoundedConcurrency(ranges");
-    expect(podcasts).toContain("PODCAST_GENERATION_CONCURRENCY");
-    expect(podcasts).toContain("runBoundedConcurrency(rows");
   });
 
   it("marks non-grounded daily placeholders failed when digest generation fails", () => {
@@ -121,22 +118,13 @@ describe("ingestion idempotency SQL safeguards", () => {
     expect(groundedStatusChecks.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("upserts generated podcast assets by deterministic storage path", () => {
-    const migration = readFileSync(
-      join(process.cwd(), "supabase/migrations/001_initial_schema.sql"),
-      "utf8",
-    );
-    const script = readFileSync(join(process.cwd(), "scripts/generate-weekly-podcasts.ts"), "utf8");
+  it("keeps the weekly podcast pipeline retired", () => {
+    const packageJson = readFileSync(join(process.cwd(), "package.json"), "utf8");
+    const vercel = readFileSync(join(process.cwd(), "vercel.json"), "utf8");
+    const weekly = readFileSync(join(process.cwd(), "src/lib/weekly/generate.ts"), "utf8");
 
-    expect(migration).toContain("assets_storage_path_unique");
-    expect(script).toMatch(/on conflict \(storage_path\) do update/i);
-  });
-
-  it("only generates weekly podcasts from finalized grounded weekly digests", () => {
-    const script = readFileSync(join(process.cwd(), "scripts/generate-weekly-podcasts.ts"), "utf8");
-
-    expect(script).toContain("grounding_status = 'grounded'");
-    expect(script).toContain("processing_status = 'digest_generated'");
-    expect(script).toContain("coalesce(source_digest_count, 0) > 0");
+    expect(packageJson).not.toContain("podcasts:generate");
+    expect(vercel).not.toContain("generate-weekly-podcast");
+    expect(weekly).not.toContain("generatePodcastScriptPayload");
   });
 });

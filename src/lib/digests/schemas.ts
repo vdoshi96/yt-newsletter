@@ -114,21 +114,6 @@ const weeklyGroundingSchema = z.object({
   limitations: z.array(z.string()).default([]),
 });
 
-const podcastGenerationSchema = z.object({
-  status: z.string().min(1).default("pending"),
-  target_minutes: z.number().nonnegative().optional(),
-  words_per_minute: z.number().nonnegative().optional(),
-  word_count: z.number().int().nonnegative().optional(),
-  provider: z.string().min(1).optional(),
-  model: z.string().min(1).optional(),
-  cast_id: z.string().min(1).optional(),
-  generated_at: z.string().min(1).optional(),
-  voice_config: z.record(z.string(), z.unknown()).optional(),
-  audio_qa: z.record(z.string(), z.unknown()).optional(),
-  source_references: z.array(z.record(z.string(), z.unknown())).default([]),
-  error_message: z.string().optional(),
-});
-
 const sourceReferenceSchema = z.record(z.string(), z.unknown());
 
 const partialExplanationLevelsSchema = z.object(
@@ -240,11 +225,6 @@ export const weeklyDigestSchema = z
     what_changed: z.string().min(1),
     what_to_do_next: modelStringArray,
     free_learning_plan: modelStringArray,
-    podcast_script: defaultedString("Pending deterministic podcast script."),
-    podcast_generation: podcastGenerationSchema.default({
-      status: "pending",
-      source_references: [],
-    }),
   })
   .transform((digest) => ({
     ...digest,
