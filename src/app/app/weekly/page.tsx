@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { CalendarDays, RotateCcw } from "lucide-react";
+import { DigestArchiveNavigation } from "@/components/digest-archive-navigation";
 import { DateKeyboardNavigation } from "@/components/date-keyboard-navigation";
 import { requireUser } from "@/lib/auth/current-user";
 import { getCatalogFirstWeeklyStart } from "@/lib/catalog";
 import { getCreatorsForUser } from "@/lib/creators";
 import { getSql } from "@/lib/db";
+import { getAdjacentArchiveValue } from "@/lib/digests/navigation";
 import { weeklyDigestSchema, type WeeklyDigestPayload } from "@/lib/digests/schemas";
 import { isFinalWeeklyDigestRow } from "@/lib/digests/rendering";
 import { ExplanationLevelPanel } from "@/components/explanation-level-panel";
@@ -38,21 +40,22 @@ export default async function WeeklyPage({
   const creatorId = params.creatorId ?? creators[0]?.id;
   const digests = creatorId ? await getWeeklyDigests(user.id, creatorId) : [];
   const finalDigests = digests.filter(isFinalWeeklyDigestRow);
-  const availableWeeks = finalDigests.map((digest) => digest.week_start);
+  const availableWeeks = finalDigests.map((digest) => digest.week_start).sort();
   const selectedWeekStart = resolveSelectedWeekStart(params.week, availableWeeks);
-  const latestPublishedWeekStart = [...availableWeeks].sort().at(-1) ?? selectedWeekStart;
-  const previousWeekHref = creatorId
-    ? buildDigestHref("/app/weekly", {
-        creatorId,
-        week: shiftIsoDate(selectedWeekStart, -7),
-      })
+  const latestPublishedWeekStart = availableWeeks.at(-1) ?? selectedWeekStart;
+  const selectedWeekHref = creatorId
+    ? buildDigestHref("/app/weekly", { creatorId, week: selectedWeekStart })
     : "/app/weekly";
-  const nextWeekHref = creatorId
-    ? buildDigestHref("/app/weekly", {
-        creatorId,
-        week: shiftIsoDate(selectedWeekStart, 7),
-      })
-    : "/app/weekly";
+  const previousWeekStart = getAdjacentArchiveValue(selectedWeekStart, availableWeeks, -1);
+  const nextWeekStart = getAdjacentArchiveValue(selectedWeekStart, availableWeeks, 1);
+  const previousWeekHref =
+    creatorId && previousWeekStart
+      ? buildDigestHref("/app/weekly", { creatorId, week: previousWeekStart })
+      : undefined;
+  const nextWeekHref =
+    creatorId && nextWeekStart
+      ? buildDigestHref("/app/weekly", { creatorId, week: nextWeekStart })
+      : undefined;
   const selectedDigest =
     finalDigests.find((digest) => digest.week_start === selectedWeekStart) ??
     digests.find((digest) => digest.week_start === selectedWeekStart) ??
@@ -60,7 +63,10 @@ export default async function WeeklyPage({
 
   return (
     <div className="space-y-6">
-      <DateKeyboardNavigation previousHref={previousWeekHref} nextHref={nextWeekHref} />
+      <DateKeyboardNavigation
+        previousHref={previousWeekHref ?? selectedWeekHref}
+        nextHref={nextWeekHref ?? selectedWeekHref}
+      />
       <section className="newspaper-sheet">
         <p className="section-kicker">This Week in AI</p>
         <h2 className="mt-3 text-5xl font-black tracking-tight text-slate-950">
@@ -74,6 +80,12 @@ export default async function WeeklyPage({
 
       {creatorId ? (
         <section className="ink-panel">
+          <DigestArchiveNavigation
+            previousHref={previousWeekHref}
+            previousLabel="Previous digest"
+            nextHref={nextWeekHref}
+            nextLabel="Next digest"
+          />
           <form method="get" className="grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
             <input type="hidden" name="creatorId" value={creatorId} />
             <label className="form-label">
@@ -373,15 +385,6 @@ function parseWeeklyDigestRow(digest: WeeklyRow): WeeklyDigestPayload {
 function buildDigestHref(pathname: string, params: Record<string, string>) {
   const query = new URLSearchParams(params);
   return `${pathname}?${query.toString()}`;
-}
-
-function shiftIsoDate(dateString: string, days: number) {
-  const date = new Date(`${dateString}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) {
-    return new Date().toISOString().slice(0, 10);
-  }
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
 }
 
 async function getWeeklyDigests(userId: string, creatorId: string) {
