@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { CalendarDays, RotateCcw } from "lucide-react";
+import { DigestArchiveNavigation } from "@/components/digest-archive-navigation";
 import { DateKeyboardNavigation } from "@/components/date-keyboard-navigation";
 import { DigestRenderer } from "@/components/digest-renderer";
 import { requireUser } from "@/lib/auth/current-user";
 import { getCatalogStartDate } from "@/lib/catalog";
 import { getCreatorsForUser } from "@/lib/creators";
+import { getAdjacentArchiveValue } from "@/lib/digests/navigation";
 import { dailyDigestSchema } from "@/lib/digests/schemas";
 import { getDailyVideoPickerState, selectDailyDigestForDate } from "@/lib/digests/selection";
 import { isGroundedDailyDigestRow } from "@/lib/digests/rendering";
@@ -43,17 +45,19 @@ export default async function DailyPage({
   }
 
   const digests = await getDailyDigests(user.id, creatorId);
-  const availableDates = [...new Set(digests.map((digest) => digest.digest_date))];
-  const selectedDate = params.date ?? availableDates[0] ?? new Date().toISOString().slice(0, 10);
+  const availableDates = [...new Set(digests.map((digest) => digest.digest_date))].sort();
+  const selectedDate =
+    params.date ?? availableDates.at(-1) ?? new Date().toISOString().slice(0, 10);
   const today = new Date().toISOString().slice(0, 10);
-  const previousDateHref = buildDigestHref("/app/daily", {
-    creatorId,
-    date: shiftIsoDate(selectedDate, -1),
-  });
-  const nextDateHref = buildDigestHref("/app/daily", {
-    creatorId,
-    date: shiftIsoDate(selectedDate, 1),
-  });
+  const selectedDateHref = buildDigestHref("/app/daily", { creatorId, date: selectedDate });
+  const previousDate = getAdjacentArchiveValue(selectedDate, availableDates, -1);
+  const nextDate = getAdjacentArchiveValue(selectedDate, availableDates, 1);
+  const previousDateHref = previousDate
+    ? buildDigestHref("/app/daily", { creatorId, date: previousDate })
+    : undefined;
+  const nextDateHref = nextDate
+    ? buildDigestHref("/app/daily", { creatorId, date: nextDate })
+    : undefined;
   const picker = getDailyVideoPickerState(digests, selectedDate);
   const selected = selectDailyDigestForDate(
     digests,
@@ -67,7 +71,10 @@ export default async function DailyPage({
 
   return (
     <div className="space-y-6">
-      <DateKeyboardNavigation previousHref={previousDateHref} nextHref={nextDateHref} />
+      <DateKeyboardNavigation
+        previousHref={previousDateHref ?? selectedDateHref}
+        nextHref={nextDateHref ?? selectedDateHref}
+      />
       <section className="ink-panel">
         <div className="mb-4 border-b border-slate-200 pb-4">
           <h1 className="text-xl font-black text-slate-950">Daily digest preview</h1>
@@ -75,6 +82,12 @@ export default async function DailyPage({
             Select a date and video, then load the stored edition.
           </p>
         </div>
+        <DigestArchiveNavigation
+          previousHref={previousDateHref}
+          previousLabel="Previous digest"
+          nextHref={nextDateHref}
+          nextLabel="Next digest"
+        />
         <form method="get" className="grid gap-4 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
           <input type="hidden" name="creatorId" value={creatorId} />
           <label className="form-label">
@@ -140,15 +153,6 @@ export default async function DailyPage({
 function buildDigestHref(pathname: string, params: Record<string, string>) {
   const query = new URLSearchParams(params);
   return `${pathname}?${query.toString()}`;
-}
-
-function shiftIsoDate(dateString: string, days: number) {
-  const date = new Date(`${dateString}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) {
-    return new Date().toISOString().slice(0, 10);
-  }
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
 }
 
 function BlockedDailyDigest({ digest }: { digest: DailyRow }) {
