@@ -1,16 +1,3 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/process-ingest",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/check-creators",
-      "schedule": "2 * * * *"
-    },
-    {
-      "path": "/api/cron/generate-weekly-digest",
-      "schedule": "13 13 * * 6"
-    }
-  ]
+  "crons": []
 }

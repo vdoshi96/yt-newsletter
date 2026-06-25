@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase database.
+Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase database. Production automatic jobs are temporarily paused; the app, database, routes, and manual scripts remain intact for restart.
 
 ## What Exists
 
@@ -31,11 +31,17 @@ Phase 1/2 MVP scaffold is implemented and seeded against the live Supabase datab
 - Hourly transcript retry recovery for daily uploads that were parked behind legacy 24-hour retry windows
 - Extended transcript retries after the hourly retry budget, so missing transcripts stay blocked/retryable instead of terminally failing
 - Bounded batch worker pools for daily ingest processing and weekly digest synthesis, controlled by `INGEST_PROCESS_CONCURRENCY` and `WEEKLY_DIGEST_CONCURRENCY`
+- Paused Vercel cron schedules for discovery, ingest processing, and weekly digest generation, with restart schedules recorded in `docs/wiki/operations.md`
 
 ## Verification
 
 Last known local checks:
 
+- `2026-06-24 npm test -- tests/dashboard-count-and-weekly-cron.test.ts`: passing, 7 tests
+- `2026-06-24 npm test`: passing, 136 tests
+- `2026-06-24 npm run lint`: passing
+- `2026-06-24 npx tsc --noEmit`: passing
+- `2026-06-24 npm run build`: passing
 - `2026-05-26 npm test`: passing, 137 tests
 - `2026-05-26 npm run lint`: passing
 - `2026-05-26 npx tsc --noEmit`: passing
@@ -44,6 +50,7 @@ Last known local checks:
 
 ## Deployment Notes
 
+- `2026-06-24`: Production cron jobs are intentionally paused by deploying an empty `crons` array in `vercel.json`. Restart by restoring `/api/cron/process-ingest` (`*/5 * * * *`), `/api/cron/check-creators` (`2 * * * *`), and `/api/cron/generate-weekly-digest` (`13 13 * * 6`), then redeploying.
 - Local `DATABASE_URL` and `DIRECT_URL` authenticate after rebuilding their embedded password from `DATABASE_PASSWORD`.
 - If production still shows a Postgres auth error, refresh Vercel's `DATABASE_URL` with the same URL-encoded password value used locally, then redeploy.
 - `2026-05-26`: Vercel production env was refreshed for `CRON_SECRET`, one-video cron processing, transcript retry/timeout knobs, and DeepSeek provider timeout.

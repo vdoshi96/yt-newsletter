@@ -24,6 +24,13 @@ The live Nate B. Jones catalog starts on March 1, 2026 (`CATALOG_START_DATE`). D
 
 Creator discovery runs hourly and queue processing runs every five minutes. Discovery is idempotent and queues videos that lack a daily digest and lack an open ingest item, even if the video row already exists. Daily digest writes are keyed by `video_id`, so overlapping or recovered jobs do not create duplicate digests.
 
+## 2026-06-24: Temporary Production Job Pause
+
+Automatic production jobs can be paused without deleting the project by deploying
+`vercel.json` with an empty `crons` array. The cron route handlers, database
+data, manual scripts, and restart schedule remain in the repo so the pipeline can
+be resumed by restoring the three Vercel Cron entries and redeploying.
+
 ## 2026-06-07: Weekly Podcast Retirement
 
 The automated weekly podcast path is retired. Weekly digest generation no longer creates podcast scripts, the podcast page is removed from navigation, and Vercel no longer schedules podcast audio retries. Historical database columns may remain for compatibility with existing data, but active code should not add new weekly podcast assets.
