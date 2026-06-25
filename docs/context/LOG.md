@@ -1,5 +1,14 @@
 # Log
 
+## 2026-06-24 Temporary Production Job Pause
+
+Paused automatic production jobs without deleting project state by deploying an
+empty Vercel `crons` array. The previous restart schedules are preserved in
+`docs/wiki/operations.md` and `docs/context/SKILLS.md`: `/api/cron/process-ingest`
+every five minutes, `/api/cron/check-creators` hourly at minute 2, and
+`/api/cron/generate-weekly-digest` Saturdays at 13:13 UTC. Manual scripts and
+routes remain in place for later restart or one-off operation.
+
 ## 2026-06-07 Weekly Podcast Retirement and Date Keyboard Navigation
 
 Retired the weekly podcast feature and pipeline. Removed the podcast page, app navigation item, Vercel cron route, generation scripts, prompt, TTS/audio upload code, Supabase Storage dependency path, and podcast-specific tests. Daily and weekly digest views now support left/right arrow-key date navigation when focus is not inside a form control.

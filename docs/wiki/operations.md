@@ -1,8 +1,23 @@
 # Digest Operations
 
+## Current Production Pause
+
+As of 2026-06-24, production scheduled jobs are intentionally paused by keeping
+`vercel.json` cron entries empty. This does not delete the Vercel project, app
+routes, database rows, environment variables, or manual scripts.
+
+Paused production schedules:
+
+- `/api/cron/process-ingest`: `*/5 * * * *`
+- `/api/cron/check-creators`: `2 * * * *`
+- `/api/cron/generate-weekly-digest`: `13 13 * * 6`
+
+To restart automatic jobs later, restore those three entries in `vercel.json`,
+run the normal verification checks, merge to `main`, and deploy production.
+
 ## Cron and Ingestion Flow
 
-Production uses three Vercel Cron entries:
+When production jobs are active, the app uses three Vercel Cron entries:
 
 - `/api/cron/check-creators` runs hourly at minute 2. It discovers recent uploads for every linked creator, upserts the latest videos, and queues any video that does not already have a daily digest or an open ingest item.
 - `/api/cron/process-ingest` runs every five minutes. It fetches verified YouTube transcripts, generates the daily digest only after transcript validation passes, and writes it idempotently by `video_id`. Weekly generation is isolated to the weekly cron so daily queue processing cannot spend its budget on weekly AI calls.

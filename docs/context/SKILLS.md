@@ -20,6 +20,15 @@ This queues Nate B. Jones main uploads from the four most recent completed Satur
 
 Queue ingestion from `/app/creators`, then process with `/app/settings` or `npm run ingest:process`.
 
+Production automatic jobs are currently paused by leaving `vercel.json` with an
+empty `crons` array. This keeps the project, routes, data, and manual scripts in
+place while preventing Vercel from waking the background pipeline. To restart,
+restore these entries and deploy production:
+
+- `/api/cron/process-ingest`: `*/5 * * * *`
+- `/api/cron/check-creators`: `2 * * * *`
+- `/api/cron/generate-weekly-digest`: `13 13 * * 6`
+
 Production discovery and processing are split:
 
 - `/api/cron/check-creators` runs hourly and queues missing daily work for newly discovered or previously missed videos.

@@ -17,12 +17,19 @@ describe("dashboard counts and weekly scheduling", () => {
     expect(stats).toContain("coalesce(videos.duration_seconds, 0) >= ");
   });
 
-  it("has an explicit Saturday weekly-digest cron route", () => {
-    const vercel = readRepoFile("vercel.json");
+  it("keeps production cron schedules paused with restart instructions preserved", () => {
+    const vercelConfig = JSON.parse(readRepoFile("vercel.json")) as { crons?: unknown[] };
+    const operations = readRepoFile("docs/wiki/operations.md");
+
+    expect(vercelConfig.crons).toEqual([]);
+    expect(operations).toContain("/api/cron/process-ingest`: `*/5 * * * *`");
+    expect(operations).toContain("/api/cron/check-creators`: `2 * * * *`");
+    expect(operations).toContain("/api/cron/generate-weekly-digest`: `13 13 * * 6`");
+  });
+
+  it("keeps the Saturday weekly-digest route restartable", () => {
     const route = readRepoFile("src/app/api/cron/generate-weekly-digest/route.ts");
 
-    expect(vercel).toContain("/api/cron/generate-weekly-digest");
-    expect(vercel).toContain("13 * * 6");
     expect(route).toContain("ensureCompletedWeeklyDigestsForCreator");
     expect(route).toContain("maxDuration");
   });
